@@ -6,6 +6,6 @@ import (
 
 type ContextStrategy interface {
 	Name() string
-	ShouldRun(ctx context.Context, engine *ContextEngine) bool
-	Run(ctx context.Context, engine *ContextEngine) error
+	ShouldApply(ctx context.Context, engine *ContextEngine) bool
+	Apply(ctx context.Context, engine *ContextEngine) error
 }

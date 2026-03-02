@@ -20,7 +20,7 @@ func (s *TruncateStrategy) Name() string {
 	return "truncation"
 }
 
-func (s *TruncateStrategy) Run(ctx context.Context, engine *ContextEngine) error {
+func (s *TruncateStrategy) Apply(ctx context.Context, engine *ContextEngine) error {
 	if len(engine.messages) <= s.MinMessageCount {
 		return nil
 	}
@@ -34,7 +34,8 @@ func (s *TruncateStrategy) Run(ctx context.Context, engine *ContextEngine) error
 	// 在 0 ~ toRemove - 1 中找到最后一次 User 消息，保留这个 User 之后的消息，截断之前所有的历史
 	removeIdx := toRemove - 1
 	for i := toRemove - 1; i >= 0; i-- {
-		if *engine.messages[i].GetRole() == "user" {
+		role := engine.messages[i].GetRole()
+		if role != nil && *role == "user" {
 			removeIdx = i
 			break
 		}
@@ -55,6 +56,6 @@ func (s *TruncateStrategy) Run(ctx context.Context, engine *ContextEngine) error
 	return nil
 }
 
-func (s *TruncateStrategy) ShouldRun(ctx context.Context, engine *ContextEngine) bool {
+func (s *TruncateStrategy) ShouldApply(ctx context.Context, engine *ContextEngine) bool {
 	return engine.GetContextUsage() > s.Threshold
 }

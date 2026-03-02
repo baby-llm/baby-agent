@@ -30,67 +30,14 @@ const (
 	stateAborting
 )
 
-// LogEntry 日志条目结构体
-type LogEntry struct {
-	Title   string         // 标题（如 "你:", "推理:" 等）
-	Content string         // 正文内容
-	Style   lipgloss.Style // 渲染样式
-}
-
-// NewLabel 创建轮次标签
-func NewLabel(content string) LogEntry {
-	return LogEntry{Title: "", Content: content, Style: labelStyle}
-}
-
-// NewContent 创建用户输入
-func NewContent(content string) LogEntry {
-	return LogEntry{Title: "你", Content: content, Style: contentStyle}
-}
-
-// NewAnswer 创建 AI 回答
-func NewAnswer(content string) LogEntry {
-	return LogEntry{Title: "回答", Content: content, Style: contentStyle}
-}
-
-// NewReasoning 创建推理内容
-func NewReasoning(content string) LogEntry {
-	return LogEntry{Title: "推理", Content: content, Style: reasonStyle}
-}
-
-// NewTool 创建工具调用
-func NewTool(content string) LogEntry {
-	return LogEntry{Title: "工具调用", Content: content, Style: toolStyle}
-}
-
-// NewError 创建错误信息
-func NewError(content string) LogEntry {
-	return LogEntry{Title: "错误", Content: content, Style: errorStyle}
-}
-
-// NewBorder 创建分隔线
-func NewBorder() LogEntry {
-	return LogEntry{Title: "", Content: strings.Repeat("─", 48), Style: borderStyle}
-}
-
-// AppendContent 追加内容
-func (e *LogEntry) AppendContent(chunk string) {
-	e.Content += chunk
-}
-
-func (e *LogEntry) Render() string {
-	if e.Title == "" {
-		return e.Style.Render(e.Content)
-	}
-	return e.Style.Render(e.Title + ": " + e.Content)
-}
-
 type activeStream struct {
 	events <-chan ch05.MessageVO
 	cancel context.CancelFunc
 
-	turnLogLen  int
-	reasonBody  int
-	contentBody int
+	turnLogLen   int
+	reasonBody   int
+	contentBody  int
+	strategyBody int // 当前策略 log entry 的索引
 }
 
 type model struct {
@@ -114,9 +61,6 @@ type model struct {
 var (
 	titleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
 	labelStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("69"))
-	reasonStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	toolStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
-	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 	noticeStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 	footerStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 	borderStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
@@ -293,6 +237,22 @@ func (m *model) handleStreamEvent(event ch05.MessageVO) {
 		}
 		m.logs = append(m.logs, NewError(*event.Content))
 		m.resetOutputSection()
+	case ch05.MessageTypeStrategy:
+		if event.Strategy == nil {
+			return
+		}
+		if event.Strategy.Running {
+			// 策略开始：添加新的 log entry
+			m.logs = append(m.logs, NewStrategyRunning(event.Strategy.Name))
+			m.active.strategyBody = len(m.logs) - 1
+		} else {
+			// 策略结束：更新对应的 log entry
+			if m.active.strategyBody >= 0 && m.active.strategyBody < len(m.logs) {
+				m.logs[m.active.strategyBody].UpdateStrategyCompleted(true)
+			}
+			m.active.strategyBody = -1
+		}
+		m.refreshLogsViewportContent()
 	}
 }
 
@@ -302,6 +262,7 @@ func (m *model) resetOutputSection() {
 	}
 	m.active.reasonBody = -1
 	m.active.contentBody = -1
+	// 注意：不重置 strategyBody，因为策略状态需要保留
 }
 
 func (m *model) handleStreamMsg(msg streamMsg) (tea.Model, tea.Cmd) {
@@ -345,11 +306,12 @@ func (m *model) startNewTurn(query string) (tea.Model, tea.Cmd) {
 	doneC := make(chan error)
 	ctx, cancel := context.WithCancel(context.Background())
 	m.active = &activeStream{
-		events:      streamC,
-		cancel:      cancel,
-		turnLogLen:  turnStart,
-		reasonBody:  -1,
-		contentBody: -1,
+		events:       streamC,
+		cancel:       cancel,
+		turnLogLen:   turnStart,
+		reasonBody:   -1,
+		contentBody:  -1,
+		strategyBody: -1,
 	}
 	m.state = stateRunning
 	m.refreshLogsViewportContent()

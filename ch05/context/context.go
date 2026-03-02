@@ -22,15 +22,23 @@ type ContextEngine struct {
 
 	contextTokens int
 	contextWindow int
+
+	strategyEventChan chan<- StrategyEvent // 策略执行事件通知 channel
 }
 
 func NewContextEngine(storage storage.Storage, strategies []ContextStrategy) *ContextEngine {
 	return &ContextEngine{
-		storage:       storage,
-		strategies:    strategies,
-		messages:      make([]openai.ChatCompletionMessageParamUnion, 0),
-		contextWindow: 200000,
+		storage:           storage,
+		strategies:        strategies,
+		messages:          make([]openai.ChatCompletionMessageParamUnion, 0),
+		contextWindow:     200000,
+		strategyEventChan: nil, // 默认为 nil，不发送事件
 	}
+}
+
+// SetStrategyEventChan 设置策略事件 channel
+func (c *ContextEngine) SetStrategyEventChan(ch chan<- StrategyEvent) {
+	c.strategyEventChan = ch
 }
 
 func (c *ContextEngine) GetContextUsage() float64 {
@@ -51,12 +59,40 @@ func (c *ContextEngine) AddMessages(ctx context.Context, messages []openai.ChatC
 
 func (c *ContextEngine) ApplyStrategies(ctx context.Context) {
 	for _, strategy := range c.strategies {
-		if !strategy.ShouldRun(ctx, c) {
+		if !strategy.ShouldApply(ctx, c) {
 			continue
 		}
-		if err := strategy.Run(ctx, c); err != nil {
-			log.Printf("strategy %s run failed, err: %v", strategy.Name(), err)
+
+		// 发送策略开始事件
+		c.sendStrategyEvent(StrategyEvent{
+			Type: StrategyEventStart,
+			Name: strategy.Name(),
+		})
+
+		err := strategy.Apply(ctx, c)
+
+		// 发送策略完成事件
+		c.sendStrategyEvent(StrategyEvent{
+			Type:  StrategyEventComplete,
+			Name:  strategy.Name(),
+			Error: err,
+		})
+
+		if err != nil {
+			log.Printf("strategy %s apply failed, err: %v", strategy.Name(), err)
 		}
+	}
+}
+
+// sendStrategyEvent 发送策略事件（非阻塞）
+func (c *ContextEngine) sendStrategyEvent(event StrategyEvent) {
+	if c.strategyEventChan == nil {
+		return
+	}
+	select {
+	case c.strategyEventChan <- event:
+	default:
+		// channel 已满或已关闭，丢弃事件
 	}
 }
 

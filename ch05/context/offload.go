@@ -34,7 +34,7 @@ func (s *OffloadStrategy) makeStorageKey(i int) string {
 	return fmt.Sprintf("/offload/%s_%s_%d", s.StoragePrefix, time.Now().Format("20060102_150405"), i)
 }
 
-func (s *OffloadStrategy) Run(ctx context.Context, engine *ContextEngine) error {
+func (s *OffloadStrategy) Apply(ctx context.Context, engine *ContextEngine) error {
 	if len(engine.messages) <= s.KeepRecentCount {
 		return nil
 	}
@@ -90,6 +90,6 @@ func (s *OffloadStrategy) Run(ctx context.Context, engine *ContextEngine) error 
 	return nil
 }
 
-func (s *OffloadStrategy) ShouldRun(ctx context.Context, engine *ContextEngine) bool {
+func (s *OffloadStrategy) ShouldApply(ctx context.Context, engine *ContextEngine) bool {
 	return engine.GetContextUsage() > s.Threshold
 }

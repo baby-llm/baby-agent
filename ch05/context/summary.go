@@ -23,6 +23,10 @@ type SummaryStrategy struct {
 	summaryModelConf shared.ModelConfig
 }
 
+func (s *SummaryStrategy) Name() string {
+	return "summary"
+}
+
 func NewSummaryStrategy(summaryModelConf shared.ModelConfig, keepRecentCount, summaryLength, summaryBatch int, threshold float64) *SummaryStrategy {
 	llmClient := openai.NewClient(option.WithBaseURL(summaryModelConf.BaseURL), option.WithAPIKey(summaryModelConf.ApiKey))
 	return &SummaryStrategy{
@@ -35,11 +39,11 @@ func NewSummaryStrategy(summaryModelConf shared.ModelConfig, keepRecentCount, su
 	}
 }
 
-func (s *SummaryStrategy) ShouldRun(ctx context.Context, engine *ContextEngine) bool {
+func (s *SummaryStrategy) ShouldApply(ctx context.Context, engine *ContextEngine) bool {
 	return engine.GetContextUsage() > s.Threshold
 }
 
-func (s *SummaryStrategy) Run(ctx context.Context, engine *ContextEngine) error {
+func (s *SummaryStrategy) Apply(ctx context.Context, engine *ContextEngine) error {
 	if len(engine.messages) <= s.KeepRecentCount {
 		return nil
 	}

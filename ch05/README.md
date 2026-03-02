@@ -13,6 +13,7 @@
 3. **卸载策略（Offloading）**：将长消息内容存储到外部存储，在上下文中保留摘要和恢复提示。
 4. **摘要策略（Summarization）**：使用 LLM 对历史对话进行摘要压缩，保留关键信息。
 5. **策略模式设计**：如何设计可扩展的策略接口，支持灵活组合多种上下文管理策略。
+6. **策略事件系统**：如何通过事件机制在 TUI 中展示策略执行状态。
 
 ---
 
@@ -124,27 +125,58 @@ assistant: 目录中有 file1.txt 和 file2.go
 ```go
 type ContextStrategy interface {
     Name() string
-    ShouldRun(ctx context.Context, engine *ContextEngine) bool
-    Run(ctx context.Context, engine *ContextEngine) error
+    ShouldApply(ctx context.Context, engine *ContextEngine) bool
+    Apply(ctx context.Context, engine *ContextEngine) error
 }
 ```
 
 **优势**：
 - 可扩展：新增策略无需修改核心逻辑
-- 可组合：多个策略可以按优先级同时生效
-- 可配置：通过 `ShouldRun` 控制触发条件
+- 可组合：多个策略可以按注册顺序同时生效
+- 可配置：通过 `ShouldApply` 控制触发条件
 
 **执行流程**：
 1. 每次添加消息后，`ContextEngine` 自动调用 `ApplyStrategies`
-2. 按顺序检查每个策略的 `ShouldRun`
-3. 如果返回 `true`，执行 `Run` 方法
+2. 按顺序检查每个策略的 `ShouldApply`
+3. 如果返回 `true`，执行 `Apply` 方法
 4. 策略可以修改 `messages` 和 `contextTokens`
+5. 执行过程中发送策略事件到 TUI 展示
 
 相关代码：`ch05/context/strategy.go`、`ch05/context/context.go`
 
 ---
 
-### 4. Token 计数
+### 4. 策略事件系统
+
+为了在 TUI 中实时展示策略执行状态，本章实现了事件通知机制：
+
+**事件类型**：
+- `StrategyEventStart`：策略开始执行
+- `StrategyEventComplete`：策略执行完成（成功或失败）
+
+**实现原理**：
+1. `ContextEngine` 持有 `strategyEventChan` 用于发送事件
+2. `Agent` 在 `RunStreaming` 开始时设置事件 channel
+3. 启动独立 goroutine 监听策略事件并转发到 TUI
+4. TUI 接收事件后更新日志区域，显示"策略: truncation (运行中...)"或"(已完成)"
+
+**TUI 展示效果**：
+```
+你: 请连续输出数字 1 到 100
+
+回答: 好的，我将为您输出数字 1 到 100...
+
+策略: truncation (运行中...)
+策略: truncation (已完成)
+
+回答: 1, 2, 3, ...
+```
+
+相关代码：`ch05/context/event.go`、`ch05/agent.go`、`ch05/tui/tui.go`
+
+---
+
+### 5. Token 计数
 
 为了准确判断是否需要触发策略，我们需要实时计算上下文 token 数量。
 
@@ -161,15 +193,21 @@ type ContextStrategy interface {
 
 ## 💻 代码结构速览
 
-- `ch05/context/context.go`：上下文引擎核心
+### Context 包
+- `ch05/context/context.go`：上下文引擎核心，管理消息列表和策略应用
 - `ch05/context/strategy.go`：策略接口定义
+- `ch05/context/event.go`：策略事件类型定义
 - `ch05/context/truncate.go`：截断策略实现
 - `ch05/context/offload.go`：卸载策略实现
 - `ch05/context/summary.go`：摘要策略实现
 - `ch05/context/share.go`：Token 计数工具
+
+### 其他核心模块
 - `ch05/storage/storage.go`：存储接口（用于卸载策略）
 - `ch05/tool/load_storage.go`：加载存储数据的工具
-- `ch05/agent.go`：集成上下文引擎的 Agent
+- `ch05/agent.go`：集成上下文引擎的 Agent，支持策略事件转发
+- `ch05/vo.go`：视图对象定义，包含策略事件 VO
+- `ch05/tui/tui.go`：TUI 界面，展示策略执行状态
 
 ---
 
