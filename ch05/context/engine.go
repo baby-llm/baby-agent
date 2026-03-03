@@ -19,6 +19,7 @@ type Engine struct {
 	systemPromptTemplate string
 	messages             []messageWrap
 	policies             []Policy
+	onPolicyEvent        func(policyName string, running bool, err error)
 	contextTokens        int
 	contextWindow        int
 }
@@ -105,7 +106,13 @@ func (c *Engine) applyPolicies(ctx context.Context) error {
 		if !policy.ShouldApply(ctx, c) {
 			continue
 		}
+		if c.onPolicyEvent != nil {
+			c.onPolicyEvent(policy.Name(), true, nil)
+		}
 		result, err := policy.Apply(ctx, c)
+		if c.onPolicyEvent != nil {
+			c.onPolicyEvent(policy.Name(), false, err)
+		}
 		if err != nil {
 			return fmt.Errorf("apply policy %s: %w", policy.Name(), err)
 		}
@@ -113,6 +120,10 @@ func (c *Engine) applyPolicies(ctx context.Context) error {
 		c.recountTokens()
 	}
 	return nil
+}
+
+func (c *Engine) SetPolicyEventHook(hook func(policyName string, running bool, err error)) {
+	c.onPolicyEvent = hook
 }
 
 func (c *Engine) BuildSystemPrompt() string {

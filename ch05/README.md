@@ -172,7 +172,7 @@ type Policy interface {
 3. 返回 `true` 则执行 `Policy.Apply`
 4. `Apply` 返回新的消息列表和 token 计数（`PolicyResult`）
 
-相关代码：`ch05/context/policy.go`、`ch05/context/context.go`
+相关代码：`ch05/context/policy.go`、`ch05/context/engine.go`
 
 ---
 
@@ -216,7 +216,7 @@ type Summarizer interface {
 ## 💻 代码结构速览
 
 ### Context 包
-- `ch05/context/context.go`：上下文引擎核心（`Engine`）
+- `ch05/context/engine.go`：上下文引擎核心（`Engine`）
 - `ch05/context/policy.go`：`Policy` 接口与 `PolicyResult`
 - `ch05/context/policy_truncate.go`：截断策略
 - `ch05/context/policy_offload.go`：卸载策略

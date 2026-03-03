@@ -46,7 +46,7 @@ func main() {
 
 	policies := []ctxengine.Policy{
 		ctxengine.NewOffloadPolicy(store, 0.4, 0, 100),
-		ctxengine.NewSummaryPolicy(summarizer, 0, 10, 0.6),
+		ctxengine.NewSummaryPolicy(summarizer, 10, 20, 0.6),
 		ctxengine.NewTruncatePolicy(0, 0.85),
 	}
 	contextEngine := ctxengine.NewContextEngine(policies)

@@ -34,10 +34,10 @@ type activeStream struct {
 	events <-chan ch05.MessageVO
 	cancel context.CancelFunc
 
-	turnLogLen   int
-	reasonBody   int
-	contentBody  int
-	strategyBody int // 当前策略 log entry 的索引
+	turnLogLen  int
+	reasonBody  int
+	contentBody int
+	policyBody  int // 当前策略 log entry 的索引
 }
 
 type model struct {
@@ -237,20 +237,20 @@ func (m *model) handleStreamEvent(event ch05.MessageVO) {
 		}
 		m.logs = append(m.logs, NewError(*event.Content))
 		m.resetOutputSection()
-	case ch05.MessageTypeStrategy:
-		if event.Strategy == nil {
+	case ch05.MessageTypePolicy:
+		if event.Policy == nil {
 			return
 		}
-		if event.Strategy.Running {
+		if event.Policy.Running {
 			// 策略开始：添加新的 log entry
-			m.logs = append(m.logs, NewStrategyRunning(event.Strategy.Name))
-			m.active.strategyBody = len(m.logs) - 1
+			m.logs = append(m.logs, NewPolicyRunning(event.Policy.Name))
+			m.active.policyBody = len(m.logs) - 1
 		} else {
 			// 策略结束：更新对应的 log entry
-			if m.active.strategyBody >= 0 && m.active.strategyBody < len(m.logs) {
-				m.logs[m.active.strategyBody].UpdateStrategyCompleted(true)
+			if m.active.policyBody >= 0 && m.active.policyBody < len(m.logs) {
+				m.logs[m.active.policyBody].UpdatePolicyCompleted(event.Policy.Error == nil)
 			}
-			m.active.strategyBody = -1
+			m.active.policyBody = -1
 		}
 		m.refreshLogsViewportContent()
 	}
@@ -262,7 +262,7 @@ func (m *model) resetOutputSection() {
 	}
 	m.active.reasonBody = -1
 	m.active.contentBody = -1
-	// 注意：不重置 strategyBody，因为策略状态需要保留
+	// 注意：不重置 policyBody，因为策略状态需要保留
 }
 
 func (m *model) handleStreamMsg(msg streamMsg) (tea.Model, tea.Cmd) {
@@ -306,12 +306,12 @@ func (m *model) startNewTurn(query string) (tea.Model, tea.Cmd) {
 	doneC := make(chan error)
 	ctx, cancel := context.WithCancel(context.Background())
 	m.active = &activeStream{
-		events:       streamC,
-		cancel:       cancel,
-		turnLogLen:   turnStart,
-		reasonBody:   -1,
-		contentBody:  -1,
-		strategyBody: -1,
+		events:      streamC,
+		cancel:      cancel,
+		turnLogLen:  turnStart,
+		reasonBody:  -1,
+		contentBody: -1,
+		policyBody:  -1,
 	}
 	m.state = stateRunning
 	m.refreshLogsViewportContent()

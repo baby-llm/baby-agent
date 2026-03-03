@@ -8,10 +8,10 @@ import (
 )
 
 var (
-	reasonStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	toolStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
-	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	strategyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("228")).Bold(true)
+	reasonStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	toolStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
+	errorStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	policyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("228")).Bold(true)
 )
 
 // LogEntry 日志条目结构体
@@ -51,22 +51,13 @@ func NewError(content string) LogEntry {
 	return LogEntry{Title: "错误", Content: content, Style: errorStyle}
 }
 
-// NewStrategyRunning 创建策略运行中状态
-func NewStrategyRunning(name string) LogEntry {
-	return LogEntry{Title: "策略", Content: fmt.Sprintf("%s (运行中...)", name), Style: strategyStyle}
+// NewPolicyRunning 创建策略运行中状态
+func NewPolicyRunning(name string) LogEntry {
+	return LogEntry{Title: "上下文策略", Content: fmt.Sprintf("%s (运行中...)", name), Style: policyStyle}
 }
 
-// NewStrategyCompleted 创建策略完成状态
-func NewStrategyCompleted(name string, success bool) LogEntry {
-	status := "已完成"
-	if !success {
-		status = "已失败"
-	}
-	return LogEntry{Title: "策略", Content: fmt.Sprintf("%s (%s)", name, status), Style: strategyStyle}
-}
-
-// UpdateStrategyCompleted 更新策略 log entry 为完成状态
-func (e *LogEntry) UpdateStrategyCompleted(success bool) {
+// UpdatePolicyCompleted 更新策略 log entry 为完成状态
+func (e *LogEntry) UpdatePolicyCompleted(success bool) {
 	status := "已完成"
 	if !success {
 		status = "已失败"

@@ -5,7 +5,7 @@ const (
 	MessageTypeContent   = "content"
 	MessageTypeToolCall  = "tool_call"
 	MessageTypeError     = "error"
-	MessageTypeStrategy  = "strategy"
+	MessageTypePolicy    = "policy"
 )
 
 // MessageVO 用于流式展示当前模型流式输出或者状态
@@ -15,13 +15,14 @@ type MessageVO struct {
 	ReasoningContent *string     `json:"reasoning_content,omitempty"`
 	Content          *string     `json:"content,omitempty"`
 	ToolCall         *ToolCallVO `json:"tool,omitempty"`
-	Strategy         *StrategyVO `json:"strategy,omitempty"`
+	Policy           *PolicyVO   `json:"policy,omitempty"`
 }
 
-// StrategyVO 策略执行状态
-type StrategyVO struct {
+// PolicyVO 策略执行状态
+type PolicyVO struct {
 	Name    string `json:"name"`    // 策略名称
 	Running bool   `json:"running"` // 是否正在执行
+	Error   error  `json:"error"`
 }
 
 type ToolCallVO struct {

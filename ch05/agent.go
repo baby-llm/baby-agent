@@ -82,6 +82,18 @@ func (a *Agent) ResetSession() {
 
 // RunStreaming 和 Run 基本逻辑一致，但是使用流式请求，并且通过 channel 实现流式输出
 func (a *Agent) RunStreaming(ctx context.Context, query string, viewCh chan MessageVO) error {
+	a.contextEngine.SetPolicyEventHook(func(policyName string, running bool, err error) {
+		viewCh <- MessageVO{
+			Type: MessageTypePolicy,
+			Policy: &PolicyVO{
+				Name:    policyName,
+				Running: running,
+				Error:   err,
+			},
+		}
+	})
+	defer a.contextEngine.SetPolicyEventHook(nil)
+
 	draft := a.contextEngine.StartTurn(openai.UserMessage(query))
 	defer a.contextEngine.AbortTurn(draft)
 
