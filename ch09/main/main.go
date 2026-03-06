@@ -68,6 +68,7 @@ func main() {
 
 	// Build tools list including load_skill
 	tools := []tool.Tool{
+		tool.NewReadTool(),
 		tool.CreateBashTool(shared.GetWorkspaceDir()),
 		tool.NewLoadStorageTool(memoryStorage),
 		tool.NewLoadSkillTool(),

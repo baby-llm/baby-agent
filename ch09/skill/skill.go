@@ -9,17 +9,20 @@ import (
 	"babyagent/shared"
 )
 
-// SkillMetadata contains just the metadata for system prompt injection
-type SkillMetadata struct {
-	ID          string
-	Name        string
-	Description string
+// Skill contains the complete skill payload used by load_skill tool.
+type Skill struct {
+	ID              string
+	Name            string
+	Description     string
+	MainInstruction string
+	Scripts         []string
+	References      []string
 }
 
 // Manager handles skill discovery and metadata loading
 type Manager struct {
 	skillsDir string
-	metadata  []SkillMetadata
+	skills    []Skill
 }
 
 // NewManager creates a new skill manager
@@ -27,7 +30,7 @@ func NewManager() *Manager {
 	skillsDir := filepath.Join(shared.GetWorkspaceDir(), ".babyagent", "skills")
 	return &Manager{
 		skillsDir: skillsDir,
-		metadata:  make([]SkillMetadata, 0),
+		skills:    make([]Skill, 0),
 	}
 }
 
@@ -50,14 +53,14 @@ func (m *Manager) LoadAll() error {
 
 		skillID := entry.Name()
 
-		meta, _, err := LoadSkill(skillID)
+		skillData, err := LoadSkill(skillID)
 		if err != nil {
 			// Log but continue loading other skills
 			fmt.Printf("warning: failed to load skill %s: %v\n", skillID, err)
 			continue
 		}
 
-		m.metadata = append(m.metadata, meta)
+		m.skills = append(m.skills, skillData)
 	}
 
 	return nil
@@ -65,7 +68,7 @@ func (m *Manager) LoadAll() error {
 
 // FormatForPrompt formats skill metadata for system prompt injection
 func (m *Manager) FormatForPrompt() string {
-	if len(m.metadata) == 0 {
+	if len(m.skills) == 0 {
 		return "No skills available."
 	}
 
@@ -73,8 +76,8 @@ func (m *Manager) FormatForPrompt() string {
 	sb.WriteString("You have access to the following skills. ")
 	sb.WriteString("When a user request matches a skill's purpose, use the `load_skill` tool to load the full skill instructions.\n\n")
 
-	for _, meta := range m.metadata {
-		sb.WriteString(fmt.Sprintf("- **%s*:%s\n", meta.Name, meta.Description))
+	for _, loadedSkill := range m.skills {
+		sb.WriteString(fmt.Sprintf("- **%s**: %s\n", loadedSkill.Name, loadedSkill.Description))
 	}
 
 	return sb.String()

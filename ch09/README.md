@@ -77,6 +77,7 @@
 **按需加载完整内容**：
 - LLM 分析任务后调用 `load_skill` 工具
 - 工具读取完整的技能 Markdown 内容
+- 自动发现并包含 `scripts/` 和 `references/` 目录中的相关文件
 - 技能指导注入到对话中，引导 LLM 执行
 
 ### 2. 技能文件格式
@@ -111,7 +112,45 @@ description: Review code for bugs, style issues, and best practices
 
 **正文内容**：详细的步骤、检查清单、最佳实践等
 
-### 3. 技能加载流程
+**附加资源**（可选）：
+- `scripts/`：技能相关的脚本文件列表（自动发现）
+- `references/`：技能参考文档列表（自动发现）
+
+### 3. Scripts 和 References 支持
+
+技能可以包含相关的辅助文件，LLM 可以根据需要读取这些文件：
+
+**`scripts/` 目录**：
+- 存放与技能相关的可执行脚本或辅助代码
+- 例如：测试脚本、检查工具、自动化脚本等
+
+**`references/` 目录**：
+- 存放技能相关的参考文档
+- 例如：最佳实践文档、API 文档、代码规范等
+
+**自动发现机制**：
+- `LoadSkill()` 会自动扫描这两个目录
+- 文件路径以相对路径形式返回（相对于工作区）
+- LLM 可以使用 `read` 工具按需读取这些文件的内容
+
+**示例输出**：
+```
+# Skill: Code Review
+
+## Main Instruction
+[技能指导内容...]
+
+## Utility Scripts
+- .babyagent/skills/code-review/scripts/lint.sh
+- .babyagent/skills/code-review/scripts/test.sh
+
+## References
+- .babyagent/skills/code-review/references/style-guide.md
+
+You can read the script/reference files above when you need their full content.
+```
+
+### 4. 技能加载流程
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -156,21 +195,26 @@ description: Review code for bugs, style issues, and best practices
 
 ### Skill 包 (`ch09/skill/`)
 
-**`skill.go`** - 技能管理器：
+**`skill.go`** - 技能管理器和类型定义：
+- `Skill` 结构体：包含 ID、Name、Description、MainInstruction、Scripts、References
 - `Manager`：技能管理器
 - `LoadAll()`：扫描并加载所有技能元数据
 - `FormatForPrompt()`：格式化为 system prompt 片段
 
-**`markdown.go`** - Markdown 解析：
+**`load.go`** - 技能文件加载：
 - `LoadSkill(id)`：加载技能的元数据和正文
 - 解析 YAML front matter
 - 提取 Markdown 正文内容
+- 自动发现 `scripts/` 和 `references/` 目录中的相关文件
 
 ### Tool (`ch09/tool/load_skill.go`)
 
 **`LoadSkillTool`** - 技能加载工具：
 - `ToolName()`: 返回 "load_skill"
-- `Execute()`: 调用 `skill.LoadSkill()` 获取完整内容
+- `Execute()`: 调用 `skill.LoadSkill()` 获取完整内容，包括：
+  - Main Instruction（主要指导）
+  - Utility Scripts（相关脚本文件列表）
+  - References（参考文档列表）
 
 > **💡 重要说明**：`load_skill` 工具本质上与 `read` 工具没有区别。它只是读取 `.babyagent/skills/<skill-id>/SKILL.md` 文件的内容并返回给 LLM。我们提供专门的 `load_skill` 工具而不是让 LLM 直接使用 `read` 工具的原因是：
 >
@@ -195,7 +239,7 @@ description: Review code for bugs, style issues, and best practices
 
 ```bash
 # 创建技能目录
-mkdir -p .babyagent/skills/code-review
+mkdir -p .babyagent/skills/code-review/{scripts,references}
 
 # 创建技能文件
 cat > .babyagent/skills/code-review/SKILL.md << 'EOF'
@@ -218,6 +262,8 @@ description: Review code for bugs, style issues, and best practices
 3. Review systematically using checklist
 4. Provide specific, actionable feedback
 5. Suggest improvements with code examples
+6. Use the provided linter script when available
+7. Consult the style guide reference for formatting standards
 
 ## Output Format
 \```
@@ -234,6 +280,29 @@ description: Review code for bugs, style issues, and best practices
 ## Suggestions
 - [Improvement suggestion]
 \```
+EOF
+
+# 可选：添加辅助脚本
+cat > .babyagent/skills/code-review/scripts/lint.sh << 'EOF'
+#!/bin/bash
+# Simple linter for code review
+echo "Running linter..."
+# Add your linting commands here
+EOF
+chmod +x .babyagent/skills/code-review/scripts/lint.sh
+
+# 可选：添加参考文档
+cat > .babyagent/skills/code-review/references/style-guide.md << 'EOF'
+# Code Style Guide
+
+## Naming Conventions
+- Use camelCase for variables
+- Use PascalCase for exported types
+- Use UPPER_CASE for constants
+
+## Formatting
+- Use 4 spaces for indentation
+- Maximum line length: 100 characters
 EOF
 ```
 
@@ -254,11 +323,23 @@ Agent: 我会使用 Code Review 技能来审查代码。
 
 # Skill: Code Review
 
+## Main Instruction
 [完整的技能指导内容...]
+
+## Utility Scripts
+- .babyagent/skills/code-review/scripts/lint.sh
+
+## References
+- .babyagent/skills/code-review/references/style-guide.md
+
+You can read the script/reference files above when you need their full content.
 
 ---
 
 现在我来审查 main.go：
+
+[调用 read 读取 style-guide.md 了解代码规范]
+[执行 lint.sh 脚本进行初步检查]
 
 ## Summary
 [审查结果...]
@@ -273,7 +354,11 @@ Agent: 我会使用 Code Review 技能来审查代码。
 .babyagent/
 └── skills/
     ├── code-review/
-    │   └── SKILL.md
+    │   ├── SKILL.md
+    │   ├── scripts/          # 可选：相关脚本文件
+    │   │   └── check.sh
+    │   └── references/       # 可选：参考文档
+    │       └── best-practices.md
     ├── debug/
     │   └── SKILL.md
     └── refactor/
@@ -298,6 +383,7 @@ description: 技能描述，帮助 LLM 理解使用场景
 3. **输出格式**：定义标准输出格式
 4. **最佳实践**：包含领域最佳实践
 5. **示例**：提供具体示例
+6. **辅助资源**：利用 `scripts/` 和 `references/` 提供额外支持
 
 ---
 

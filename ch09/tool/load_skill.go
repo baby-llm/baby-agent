@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/shared"
@@ -55,11 +56,33 @@ func (t *LoadSkillTool) Execute(ctx context.Context, argumentsInJSON string) (st
 		return "", fmt.Errorf("skill name is required")
 	}
 
-	meta, content, err := skill.LoadSkill(p.Name)
+	loadedSkill, err := skill.LoadSkill(p.Name)
 	if err != nil {
 		return "", fmt.Errorf("failed to load skill '%s': %w", p.Name, err)
 	}
 
-	result := fmt.Sprintf("# Skill: %s\n\n%s", meta.Name, content)
-	return result, nil
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("# Skill: %s\n\n", loadedSkill.Name))
+	sb.WriteString("## Main Instruction\n\n")
+	sb.WriteString(loadedSkill.MainInstruction)
+	sb.WriteString("\n\n## Utility Scripts\n")
+	if len(loadedSkill.Scripts) == 0 {
+		sb.WriteString("- (none)\n")
+	} else {
+		for _, filePath := range loadedSkill.Scripts {
+			sb.WriteString(fmt.Sprintf("- %s\n", filePath))
+		}
+	}
+
+	sb.WriteString("\n## References\n")
+	if len(loadedSkill.References) == 0 {
+		sb.WriteString("- (none)\n")
+	} else {
+		for _, filePath := range loadedSkill.References {
+			sb.WriteString(fmt.Sprintf("- %s\n", filePath))
+		}
+	}
+
+	sb.WriteString("\nYou can read the script/reference files above when you need their full content.")
+	return sb.String(), nil
 }
