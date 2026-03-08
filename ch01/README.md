@@ -227,5 +227,5 @@ go run ./ch01/main --raw --stream -q "从 1 数到 5"
    *   虽然这里展示的是 Web 前端的文档，但 SSE 协议的本质是一样的。了解 SSE 协议的标准格式（如 `data:`, `event:`, `id:` 等），有助于你理解大模型流式输出的底层机制。
 3.  **[openai-go SDK GitHub Repository](https://github.com/openai/openai-go)**
    *   官方 Go SDK 的源码仓库。如果你想了解 SDK 是如何封装重试逻辑、处理错误回调的，阅读其源码是非常好的学习途径。
-4.  **[DeepSeek API Docs](https://api-docs.deepseek.com//)** (或者你常用的国内模型文档)
+4.  **[DeepSeek API Docs](https://api-docs.deepseek.com)** (或者你常用的国内模型文档)
    *   看看其他厂商是如何实现兼容 OpenAI 格式的 API 接口的，通常只需要替换 Base URL 和模型名即可。
