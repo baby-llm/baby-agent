@@ -3,7 +3,6 @@ package tool
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"os"
 	"strings"
 
