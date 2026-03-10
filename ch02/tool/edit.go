@@ -3,7 +3,6 @@ package tool
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"os"
 	"strings"
 
@@ -59,21 +58,25 @@ func (t *EditTool) Execute(ctx context.Context, argumentsInJSON string) (string,
 		return "", err
 	}
 
-	file, err := os.OpenFile(p.Path, os.O_RDWR, 0644)
+	raw, err := os.ReadFile(p.Path)
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
 
-	raw, err := io.ReadAll(file)
+	backupPath := p.Path + ".bak"
+	err = os.WriteFile(backupPath, raw, 0644)
 	if err != nil {
 		return "", err
 	}
 
 	replaced := strings.ReplaceAll(string(raw), p.Before, p.After)
-	_, err = io.WriteString(file, replaced)
+
+	err = os.WriteFile(p.Path, []byte(replaced), 0644)
 	if err != nil {
+		os.Rename(backupPath, p.Path)
 		return "", err
 	}
+
+	os.Remove(backupPath)
 	return "", nil
 }
