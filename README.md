@@ -109,7 +109,7 @@
 *   **确认状态管理**：Allow/Reject/Always Allow 三种确认选项
 *   **Context 取消机制**：用户按 ESC 提前终止 Agent Loop
 
-### 第九章：Agent 技能系统（Skills）
+### 第九章：Agent 技能插件（Skills）
 
 **目标**：让 Agent 学会在不同场景下使用工具的最佳实践。
 
@@ -198,7 +198,7 @@ baby-agent/
 ├── ch06/           # ✅ 第六章：记忆机制
 ├── ch07/           # ✅ 第七章：Agentic RAG
 ├── ch08/           # ✅ 第八章：沙盒与安全防御
-├── ch09/           # ✅ 第九章：Agent 技能系统
+├── ch09/           # ✅ 第九章：Agent 技能插件
 ├── ch10/           # 🚧 第十章：Web 服务化与 SSE 流式传输（规划中）
 ├── ch11/           # 🚧 第十一章：服务端状态管理（规划中）
 ├── ch12/           # 🚧 第十二章：Agent 评测与自动化测试（规划中）
@@ -233,10 +233,10 @@ go run ./ch05/main
 # 第六章：记忆系统
 go run ./ch06/main
 
-# 第八章：完整 Agent（含 Docker 沙盒和工具确认）
+# 第八章：安全防御
 go run ./ch08/main
 
-# 第九章：技能系统
+# 第九章：技能插件
 go run ./ch09/main
 ```
 
