@@ -38,11 +38,11 @@ type ConversationVO struct {
 
 // RoundMessageVO 是一条 LLM round 消息的精简视图
 type RoundMessageVO struct {
-	Role      string          `json:"role"`                 // user / assistant / tool
-	Content   string          `json:"content,omitempty"`    // 文本内容
-	ToolCalls []ToolCallVO    `json:"tool_calls,omitempty"` // assistant 发起的 tool call
-	ToolName  string          `json:"tool_name,omitempty"`  // tool 消息的工具名
-	ToolID    string          `json:"tool_id,omitempty"`    // tool 消息对应的 call_id
+	Role      string       `json:"role"`                 // user / assistant / tool
+	Content   string       `json:"content,omitempty"`    // 文本内容
+	ToolCalls []ToolCallVO `json:"tool_calls,omitempty"` // assistant 发起的 tool call
+	ToolName  string       `json:"tool_name,omitempty"`  // tool 消息的工具名
+	ToolID    string       `json:"tool_id,omitempty"`    // tool 消息对应的 call_id
 }
 
 // ToolCallVO 是一次 tool call 的精简视图

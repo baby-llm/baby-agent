@@ -37,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        chapter: [ch01, ch02, ch03, ch04, ch05, ch06, ch08, ch09]
+        chapter: [ch01, ch02, ch03, ch04, ch05, ch06, ch08, ch09, ch10]
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -53,3 +53,30 @@ jobs:
 
       - name: Build
         run: go build -v ./${{ matrix.chapter }}/main
+
+  frontend-lint:
+    name: Frontend Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: pnpm install
+
+      - name: Lint
+        working-directory: frontend
+        run: pnpm lint

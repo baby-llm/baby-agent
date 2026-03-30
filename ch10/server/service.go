@@ -13,6 +13,7 @@ import (
 	"babyagent/shared"
 	"babyagent/shared/log"
 )
+
 type Server struct {
 	db    *gorm.DB
 	agent *agent.Agent
