@@ -58,6 +58,7 @@ interface StreamThreadRunArgs {
   signal?: AbortSignal
   onEvent: (event: SSEMessageVO) => void
   onClose: () => void
+  onError?: (error: Error) => void
 }
 
 export type ThreadOperation = 'rename' | 'archive' | 'delete'
@@ -118,9 +119,18 @@ export function streamThreadRun({
   signal,
   onEvent,
   onClose,
+  onError,
 }: StreamThreadRunArgs): () => void {
   const ctrl = new AbortController()
   const cleanup = bindAbortSignal(signal, ctrl)
+  let finalized = false
+
+  const finalize = (callback?: () => void) => {
+    if (finalized) return
+    finalized = true
+    cleanup()
+    callback?.()
+  }
 
   fetchEventSource(`${BASE}/conversation/${threadId}/message`, {
     method: 'POST',
@@ -132,18 +142,27 @@ export function streamThreadRun({
       if (event) onEvent(event)
     },
     onclose() {
-      cleanup()
-      onClose()
+      finalize(onClose)
     },
     onerror(err) {
       throw err // stop retrying
     },
   }).catch((err) => {
-    if (err.name !== 'AbortError') console.error('SSE error:', err)
+    if (isAbortError(err)) {
+      finalize()
+      return
+    }
+
+    const error = normalizeStreamError(err)
+    console.error('SSE error:', error)
+    finalize(() => {
+      onError?.(error)
+      onClose()
+    })
   })
 
   return () => {
-    cleanup()
+    finalize()
     ctrl.abort()
   }
 }
@@ -158,6 +177,7 @@ export function streamMessage(
   onEvent: (event: SSEMessageVO) => void,
   onClose: () => void,
   parentMessageId?: string,
+  onError?: (error: Error) => void,
 ): () => void {
   return streamThreadRun({
     threadId: conversationId,
@@ -165,6 +185,7 @@ export function streamMessage(
     parentMessageId,
     onEvent,
     onClose,
+    onError,
   })
 }
 
@@ -206,4 +227,19 @@ function bindAbortSignal(signal: AbortSignal | undefined, ctrl: AbortController)
   const abort = () => ctrl.abort(signal.reason)
   signal.addEventListener('abort', abort, { once: true })
   return () => signal.removeEventListener('abort', abort)
+}
+
+function isAbortError(err: unknown): err is Error {
+  return err instanceof Error && err.name === 'AbortError'
+}
+
+function normalizeStreamError(err: unknown): Error {
+  if (err instanceof Error) return err
+  if (typeof err === 'string') return new Error(err)
+
+  try {
+    return new Error(JSON.stringify(err))
+  } catch {
+    return new Error('Unknown SSE transport error')
+  }
 }

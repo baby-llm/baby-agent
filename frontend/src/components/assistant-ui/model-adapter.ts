@@ -9,7 +9,12 @@ import type { ReadonlyJSONObject } from 'assistant-stream/utils'
 
 import { streamThreadRun, type SSEMessageVO } from '../../api'
 
-type StreamQueueItem = SSEMessageVO | typeof STREAM_DONE
+interface TransportErrorItem {
+  type: 'transport-error'
+  error: Error
+}
+
+type StreamQueueItem = SSEMessageVO | TransportErrorItem | typeof STREAM_DONE
 
 const STREAM_DONE = Symbol('stream-done')
 const DEFAULT_TOOL_NAME = 'tool'
@@ -85,6 +90,10 @@ export const babyAgentChatModelAdapter: ChatModelAdapter = {
       parentMessageId: getLatestBackendMessageId(options.messages),
       signal: options.abortSignal,
       onEvent: (event) => queue.push(event),
+      onError: (error) => {
+        queue.push({ type: 'transport-error', error })
+        queue.close(STREAM_DONE)
+      },
       onClose: () => queue.close(STREAM_DONE),
     })
 
@@ -99,6 +108,7 @@ export const babyAgentChatModelAdapter: ChatModelAdapter = {
       while (true) {
         const item = await queue.next()
         if (item === STREAM_DONE) break
+        if (isTransportErrorItem(item)) throw item.error
 
         const update = applySSEEvent(state, item)
         if (update) yield update
@@ -168,6 +178,10 @@ function applySSEEvent(state: RunState, event: SSEMessageVO): ChatModelRunResult
       },
     },
   }
+}
+
+function isTransportErrorItem(item: StreamQueueItem): item is TransportErrorItem {
+  return item !== STREAM_DONE && 'type' in item && item.type === 'transport-error'
 }
 
 function appendTextPart(state: RunState, delta: string): void {
