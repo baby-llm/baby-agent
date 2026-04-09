@@ -46,14 +46,14 @@ export function toPersistedAssistantMessage(message: ChatMessageVO): PersistedAs
 export function toAssistantThreadMessages(message: ChatMessageVO): AssistantThreadMessage[] {
   const persistedMessage = toPersistedAssistantMessage(message)
   const userMessageId = toSyntheticUserMessageId(message.message_id)
-  const assistantParts: AssistantMessagePart[] = []
+  const assistantParts: AssistantMessagePart[] = [
+    ...toolCallChunksToMessageParts(persistedMessage.toolCallChunks),
+    ...toolResultChunksToMessageParts(persistedMessage.toolResultChunks),
+  ]
 
   if (persistedMessage.response) {
     assistantParts.push({ type: 'text', text: persistedMessage.response })
   }
-
-  assistantParts.push(...toolCallChunksToMessageParts(persistedMessage.toolCallChunks))
-  assistantParts.push(...toolResultChunksToMessageParts(persistedMessage.toolResultChunks))
 
   return [
     {
