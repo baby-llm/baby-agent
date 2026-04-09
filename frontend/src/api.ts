@@ -60,6 +60,24 @@ interface StreamThreadRunArgs {
   onClose: () => void
 }
 
+export type ThreadOperation = 'rename' | 'archive' | 'delete'
+
+export interface ThreadOperationUnsupported {
+  ok: false
+  unsupported: true
+  operation: ThreadOperation
+  threadId: string
+  message: string
+}
+
+export type ThreadOperationResult = ThreadOperationUnsupported
+
+export const THREAD_OPERATION_SUPPORT: Record<ThreadOperation, false> = {
+  rename: false,
+  archive: false,
+  delete: false,
+}
+
 export async function fetchThreads(): Promise<ConversationVO[]> {
   const json = await requestJSON<ConversationVO[]>(`${BASE}/conversation?user_id=${USER_ID}`)
   return json.data ?? []
@@ -75,20 +93,17 @@ export async function createThread(title = 'New Chat'): Promise<ConversationVO> 
   return json.data
 }
 
-export async function renameThread(threadId: string, title: string): Promise<never> {
-  void threadId
+export async function renameThread(threadId: string, title: string): Promise<ThreadOperationResult> {
   void title
-  throw new Error('renameThread is not implemented by the backend yet')
+  return unsupportedThreadOperation('rename', threadId)
 }
 
-export async function archiveThread(threadId: string): Promise<never> {
-  void threadId
-  throw new Error('archiveThread is not implemented by the backend yet')
+export async function archiveThread(threadId: string): Promise<ThreadOperationResult> {
+  return unsupportedThreadOperation('archive', threadId)
 }
 
-export async function deleteThread(threadId: string): Promise<never> {
-  void threadId
-  throw new Error('deleteThread is not implemented by the backend yet')
+export async function deleteThread(threadId: string): Promise<ThreadOperationResult> {
+  return unsupportedThreadOperation('delete', threadId)
 }
 
 export async function fetchThreadMessages(threadId: string): Promise<ChatMessageVO[]> {
@@ -158,6 +173,19 @@ async function requestJSON<T>(input: RequestInfo | URL, init?: RequestInit): Pro
   const json = await res.json() as APIResponse<T>
   if (json.code !== 0) throw new Error(json.msg)
   return json
+}
+
+function unsupportedThreadOperation(
+  operation: ThreadOperation,
+  threadId: string,
+): ThreadOperationUnsupported {
+  return {
+    ok: false,
+    unsupported: true,
+    operation,
+    threadId,
+    message: `${operation}Thread is not implemented by the backend yet`,
+  }
 }
 
 function parseSSEMessage(data: string): SSEMessageVO | null {

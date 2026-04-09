@@ -95,7 +95,6 @@ export function toAssistantStreamEvent(
   }
 
   if (event.event === 'tool_call') {
-    const toolCallId = toSyntheticStreamToolCallId(event)
     return {
       messageId: event.message_id,
       threadId: context.threadId,
@@ -108,7 +107,6 @@ export function toAssistantStreamEvent(
           type: 'tool-call',
           messageId: event.message_id,
           parentMessageId,
-          toolCallId,
           toolName: event.tool_call ?? '',
           args: event.tool_arguments ?? '',
         },
@@ -118,7 +116,6 @@ export function toAssistantStreamEvent(
   }
 
   if (event.event === 'tool_result') {
-    const toolCallId = toSyntheticStreamToolCallId(event)
     return {
       messageId: event.message_id,
       threadId: context.threadId,
@@ -132,7 +129,6 @@ export function toAssistantStreamEvent(
           type: 'tool-result',
           messageId: event.message_id,
           parentMessageId,
-          toolCallId,
           toolName: event.tool_call ?? '',
           result: event.tool_result ?? '',
         },
@@ -155,7 +151,8 @@ export function toAssistantStreamEvent(
 // query becomes the user message, response becomes the assistant text part,
 // rounds[].tool_calls become tool-call parts, and rounds[role=tool] become
 // tool-result parts. Reasoning is left as side-channel state unless a later UI
-// explicitly decides to promote it into canonical message parts.
+// explicitly decides to promote it into canonical message parts. Fetched history
+// currently cannot reconstruct reasoning because ChatMessageVO does not expose it.
 export function extractRoundChunks(message: ChatMessageVO): {
   reasoningChunks: ReasoningChunk[]
   toolCallChunks: ToolCallChunk[]
@@ -164,13 +161,22 @@ export function extractRoundChunks(message: ChatMessageVO): {
   const reasoningChunks: ReasoningChunk[] = []
   const toolCallChunks: ToolCallChunk[] = []
   const toolResultChunks: ToolResultChunk[] = []
+  const toolNameById = new Map<string, string>()
 
   for (const round of message.rounds ?? []) {
     if (round.role === 'assistant' && round.tool_calls?.length) {
+      for (const toolCall of round.tool_calls) {
+        toolNameById.set(toolCall.id, toolCall.name)
+      }
       toolCallChunks.push(...toToolCallChunks(message.message_id, message.parent_message_id, round))
     }
+  }
+
+  for (const round of message.rounds ?? []) {
     if (round.role === 'tool') {
-      toolResultChunks.push(toToolResultChunk(message.message_id, message.parent_message_id, round))
+      toolResultChunks.push(
+        toToolResultChunk(message.message_id, message.parent_message_id, round, toolNameById),
+      )
     }
   }
 
@@ -197,12 +203,6 @@ export function toolResultChunksToMessageParts(chunks: ToolResultChunk[]): Assis
 
 function toSyntheticUserMessageId(messageId: string): string {
   return `${messageId}${SYNTHETIC_USER_SUFFIX}`
-}
-
-function toSyntheticStreamToolCallId(event: SSEMessageVO): string {
-  // SSE events expose the tool name but not the backend call id, so the stream
-  // contract uses a synthetic key until the server sends a real identifier.
-  return `${event.message_id}:${event.tool_call ?? ''}`
 }
 
 function toReasoningChunk(
@@ -237,13 +237,14 @@ function toToolResultChunk(
   messageId: string,
   parentMessageId: string,
   round: RoundMessageVO,
+  toolNameById: Map<string, string>,
 ): ToolResultChunk {
   return {
     type: 'tool-result',
     messageId,
     parentMessageId,
-    toolCallId: round.tool_id ?? '',
-    toolName: round.tool_name ?? '',
+    toolCallId: round.tool_id || undefined,
+    toolName: round.tool_name || (round.tool_id ? toolNameById.get(round.tool_id) ?? '' : ''),
     result: round.content ?? '',
   }
 }
