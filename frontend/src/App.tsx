@@ -1,13 +1,22 @@
 import { useState, useEffect } from 'react'
 import Sidebar from './components/Sidebar'
 import ChatPanel from './components/ChatPanel'
+import AssistantThread from './components/assistant-ui/thread'
+import AssistantThreadList from './components/assistant-ui/thread-list'
+import { BabyAgentRuntimeProvider } from './components/assistant-ui/runtime-provider'
 import {
   listConversations,
   createConversation,
   type ConversationVO,
 } from './api'
 
+const USE_ASSISTANT_UI = false
+
 export default function App() {
+  return USE_ASSISTANT_UI ? <AssistantUIApp /> : <LegacyApp />
+}
+
+function LegacyApp() {
   const [conversations, setConversations] = useState<ConversationVO[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   // null means "pending new chat" (no conversation created yet)
@@ -55,5 +64,16 @@ export default function App() {
         )}
       </div>
     </div>
+  )
+}
+
+function AssistantUIApp() {
+  return (
+    <BabyAgentRuntimeProvider>
+      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+        <AssistantThreadList />
+        <AssistantThread />
+      </div>
+    </BabyAgentRuntimeProvider>
   )
 }
