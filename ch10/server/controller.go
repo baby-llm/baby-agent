@@ -16,6 +16,8 @@ func NewRouter(s *Server) *gin.Engine {
 	api := g.Group("/api")
 	api.POST("/conversation", s.createConversation)
 	api.GET("/conversation", s.listConversations)
+	api.PATCH("/conversation/:conversation_id", s.renameConversation)
+	api.DELETE("/conversation/:conversation_id", s.deleteConversation)
 	api.POST("/conversation/:conversation_id/message", s.createMessage)
 	api.GET("/conversation/:conversation_id/message", s.listMessages)
 
@@ -50,6 +52,37 @@ func (s *Server) listConversations(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, vo.OK(result))
+}
+
+// PATCH /conversation/:conversation_id
+func (s *Server) renameConversation(c *gin.Context) {
+	conversationID := c.Param("conversation_id")
+
+	var req vo.UpdateConversationReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, vo.Err(400, err.Error()))
+		return
+	}
+
+	result, err := s.RenameConversation(conversationID, req.Title)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, vo.Err(500, err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, vo.OK(result))
+}
+
+// DELETE /conversation/:conversation_id
+func (s *Server) deleteConversation(c *gin.Context) {
+	conversationID := c.Param("conversation_id")
+
+	if err := s.DeleteConversation(conversationID); err != nil {
+		c.JSON(http.StatusInternalServerError, vo.Err(500, err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, vo.OK(map[string]any{"conversation_id": conversationID}))
 }
 
 // GET /conversation/:conversation_id/message

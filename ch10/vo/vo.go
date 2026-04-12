@@ -21,6 +21,11 @@ type CreateConversationReq struct {
 	Title  string `json:"title"`
 }
 
+// UpdateConversationReq PATCH /conversation/{id} 请求体
+type UpdateConversationReq struct {
+	Title string `json:"title" binding:"required"`
+}
+
 // CreateMessageReq POST /conversation/{id}/message 请求体
 type CreateMessageReq struct {
 	UserID          string `json:"user_id" binding:"required"`

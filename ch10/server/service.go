@@ -63,6 +63,38 @@ func (s *Server) ListConversations(userID string) ([]vo.ConversationVO, error) {
 	return result, nil
 }
 
+func (s *Server) RenameConversation(conversationID string, title string) (vo.ConversationVO, error) {
+	if err := s.db.Model(&Conversation{}).
+		Where("conversation_id = ?", conversationID).
+		Update("title", title).Error; err != nil {
+		return vo.ConversationVO{}, err
+	}
+
+	var conv Conversation
+	if err := s.db.First(&conv, "conversation_id = ?", conversationID).Error; err != nil {
+		return vo.ConversationVO{}, err
+	}
+
+	return vo.ConversationVO{
+		ConversationID: conv.ConversationID,
+		UserID:         conv.UserID,
+		Title:          conv.Title,
+		CreatedAt:      conv.CreatedAt,
+	}, nil
+}
+
+func (s *Server) DeleteConversation(conversationID string) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("conversation_id = ?", conversationID).
+			Delete(&ChatMessage{}).Error; err != nil {
+			return err
+		}
+
+		return tx.Where("conversation_id = ?", conversationID).
+			Delete(&Conversation{}).Error
+	})
+}
+
 func (s *Server) ListMessages(conversationID string) ([]vo.ChatMessageVO, error) {
 	var msgs []ChatMessage
 	if err := s.db.Where("conversation_id = ?", conversationID).
