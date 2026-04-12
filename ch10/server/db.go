@@ -1,7 +1,7 @@
 package server
 
 import (
-	"gorm.io/driver/sqlite"
+	"github.com/libtnb/sqlite"
 	"gorm.io/gorm"
 )
 
