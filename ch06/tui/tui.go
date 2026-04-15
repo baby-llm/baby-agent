@@ -34,11 +34,14 @@ type activeStream struct {
 	events <-chan ch06.MessageVO
 	cancel context.CancelFunc
 
-	turnLogLen  int
-	reasonBody  int
-	contentBody int
-	policyBody  int // 当前策略 log entry 的索引
-	memoryBody  int // 当前记忆更新 log entry 的索引
+	turnLogLen   int
+	reasonBody   int
+	contentBody  int
+	policyBody   int // 当前策略 log entry 的索引
+	memoryBody   int // 当前记忆更新 log entry 的索引
+	streamClosed bool
+	doneReceived bool
+	doneErr      error
 }
 
 type TuiViewModel struct {
@@ -133,6 +136,10 @@ func (m *TuiViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamClosedMsg:
 		if m.active != nil {
 			m.active.events = nil
+			m.active.streamClosed = true
+			if m.active.doneReceived {
+				return m.finalizeActiveStream()
+			}
 		}
 		return m, nil
 	case streamDoneMsg:
@@ -303,21 +310,13 @@ func (m *TuiViewModel) handleStreamDone(msg streamDoneMsg) (tea.Model, tea.Cmd) 
 		return m, nil
 	}
 
-	m.stopActiveStream()
-	if m.state == stateAborting {
-		m.rollbackTurn()
-		m.notice = "已取消本轮输入。"
-		m.state = stateIdle
+	m.active.doneReceived = true
+	m.active.doneErr = msg.err
+	if !m.active.streamClosed {
 		return m, nil
 	}
 
-	if msg.err != nil {
-		m.logs = append(m.logs, NewError(msg.err.Error()))
-	}
-	m.logs = append(m.logs, NewBorder())
-	m.state = stateIdle
-	m.refreshLogsViewportContent()
-	return m, nil
+	return m.finalizeActiveStream()
 }
 
 func (m *TuiViewModel) startNewTurn(query string) (tea.Model, tea.Cmd) {
@@ -384,6 +383,31 @@ func (m *TuiViewModel) stopActiveStream() {
 		m.active.cancel()
 	}
 	m.active = nil
+}
+
+func (m *TuiViewModel) finalizeActiveStream() (tea.Model, tea.Cmd) {
+	if m.active == nil {
+		m.state = stateIdle
+		return m, nil
+	}
+
+	err := m.active.doneErr
+	if m.state == stateAborting {
+		m.rollbackTurn()
+		m.notice = "已取消本轮输入。"
+		m.stopActiveStream()
+		m.state = stateIdle
+		return m, nil
+	}
+
+	m.stopActiveStream()
+	if err != nil {
+		m.logs = append(m.logs, NewError(err.Error()))
+	}
+	m.logs = append(m.logs, NewBorder())
+	m.state = stateIdle
+	m.refreshLogsViewportContent()
+	return m, nil
 }
 
 func (m *TuiViewModel) scrollUp(n int) {
