@@ -18,7 +18,7 @@
 
 *   **Language:** Go 1.24+
 *   **LLM Concepts:** Chat Completions API, SSE 流式传输, Function Calling, ReAct Agent Loop
-*   **Advanced AI:** 上下文工程, Memory 系统, Agentic RAG, 技能系统（Skills）
+*   **Advanced AI:** 上下文工程, Memory 系统, Agentic RAG, 技能系统（Skills）, 显式规划（TodoWrite）
 *   **System Design:** MCP 协议,  Guardrails 安全防护, Web 服务化
 *   **Engineering:** LLM 评测, 可观测性（Trace/Metrics/Log）
 
@@ -139,7 +139,19 @@
 
 ---
 
-### 第十二章：Agent 评测与自动化测试（LLM Eval）🚧
+### 第十二章：显式规划（TodoWrite 与 Nag Reminder）
+
+**目标**：让 Agent 在多步骤任务里显式维护当前计划，并在 Web 界面里可视化展示执行进度。
+
+*   **TodoWrite 工具**：让模型将当前任务计划写成结构化 todo 列表
+*   **Nag Reminder**：当 Agent 忘记写计划或长期不更新计划时，注入轻量提醒
+*   **最小状态机**：`pending / in_progress / completed` 三态足够表达当前进度
+*   **计划快照持久化**：将 todo 快照存入消息历史，支持刷新恢复与分支对话
+*   **Web 计划面板**：在聊天界面右侧展示当前 todo 列表
+
+---
+
+### 第十三章：Agent 评测与自动化测试（LLM Eval）🚧
 
 **目标**：摒弃"靠肉眼看效果"的黑盒测试，构建自动化评测流水线。
 
@@ -192,7 +204,7 @@ baby-agent/
 ├── ch09/           # ✅ 第九章：Agent 技能插件
 ├── ch10/           # ✅ 第十章：Web 服务化与 SSE 流式传输
 ├── ch11/           # 🚧 第十一章：Agent 可观测性（规划中）
-├── ch12/           # 🚧 第十二章：Agent 评测与自动化测试（规划中）
+├── ch12/           # ✅ 第十二章：显式规划（TodoWrite 与 Nag Reminder）
 ├── shared/         # 共享代码（配置、MCP 等）
 ├── .env            # 环境变量配置
 └── README.md       # 本文件
@@ -231,6 +243,9 @@ go run ./ch09/main
 
 # 第十章：Web 服务（监听 :8080）
 go run ./ch10/main
+
+# 第十二章：显式规划 Web 服务（监听 :8080）
+go run ./ch12/main
 ```
 
 第七章是独立的索引和工具实现，可参考 `ch07/README.md` 中的使用示例。

@@ -10,7 +10,9 @@ import {
   type ConversationVO,
 } from './api'
 
-const USE_ASSISTANT_UI = true
+// ch12 needs a simple chapter-oriented layout with a dedicated plan panel.
+// Keep the legacy flow active until planning state is wired into assistant-ui.
+const USE_ASSISTANT_UI = false
 
 export default function App() {
   return USE_ASSISTANT_UI ? <AssistantUIApp /> : <LegacyApp />
