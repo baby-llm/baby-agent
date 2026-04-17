@@ -164,6 +164,8 @@ function applySSEEvent(state: RunState, event: SSEMessageVO): ChatModelRunResult
       break
     case 'error':
       throw new Error(event.content || 'The backend returned an error event while streaming the assistant response')
+    case 'todo_snapshot':
+      return null
     default: {
       const exhaustiveCheck: never = event.event
       throw new Error(`Unsupported SSE event: ${exhaustiveCheck}`)

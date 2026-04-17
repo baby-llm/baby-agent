@@ -39,16 +39,29 @@ export interface ChatMessageVO {
   model: string
   created_at: number
   rounds?: RoundMessageVO[]
+  plan_state?: PlanningState
+}
+
+export interface PlanItem {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+}
+
+export interface PlanningState {
+  items: PlanItem[]
+  revision: number
+  last_updated_loop: number
 }
 
 export interface SSEMessageVO {
   message_id: string
-  event: 'error' | 'reasoning' | 'content' | 'tool_call' | 'tool_result'
+  event: 'error' | 'reasoning' | 'content' | 'tool_call' | 'tool_result' | 'todo_snapshot'
   content?: string
   reasoning_content?: string
   tool_call?: string
   tool_arguments?: string
   tool_result?: string
+  plan_state?: PlanningState
 }
 
 interface StreamThreadRunArgs {
