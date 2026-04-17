@@ -36,11 +36,14 @@ type activeStream struct {
 	cancel    context.CancelFunc
 	confirmCh chan ch08.ConfirmationAction
 
-	turnLogLen  int
-	reasonBody  int
-	contentBody int
-	policyBody  int // 当前策略 log entry 的索引
-	memoryBody  int // 当前记忆更新 log entry 的索引
+	turnLogLen   int
+	reasonBody   int
+	contentBody  int
+	policyBody   int // 当前策略 log entry 的索引
+	memoryBody   int // 当前记忆更新 log entry 的索引
+	streamClosed bool
+	doneReceived bool
+	doneErr      error
 }
 
 type TuiViewModel struct {
@@ -141,6 +144,10 @@ func (m *TuiViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamClosedMsg:
 		if m.active != nil {
 			m.active.events = nil
+			m.active.streamClosed = true
+			if m.active.doneReceived {
+				return m.finalizeActiveStream()
+			}
 		}
 		return m, nil
 	case streamDoneMsg:
@@ -361,22 +368,13 @@ func (m *TuiViewModel) handleStreamDone(msg streamDoneMsg) (tea.Model, tea.Cmd) 
 		return m, nil
 	}
 
-	m.stopActiveStream()
-	if m.state == stateAborting {
-		// 不回滚，保留消息
-		m.logs = append(m.logs, NewNotice("用户取消了 agent loop，消息已保留。"))
-		m.state = stateIdle
-		m.refreshLogsViewportContent()
+	m.active.doneReceived = true
+	m.active.doneErr = msg.err
+	if !m.active.streamClosed {
 		return m, nil
 	}
 
-	if msg.err != nil {
-		m.logs = append(m.logs, NewError(msg.err.Error()))
-	}
-	m.logs = append(m.logs, NewBorder())
-	m.state = stateIdle
-	m.refreshLogsViewportContent()
-	return m, nil
+	return m.finalizeActiveStream()
 }
 
 func (m *TuiViewModel) startNewTurn(query string) (tea.Model, tea.Cmd) {
@@ -445,6 +443,32 @@ func (m *TuiViewModel) stopActiveStream() {
 		m.active.cancel()
 	}
 	m.active = nil
+}
+
+func (m *TuiViewModel) finalizeActiveStream() (tea.Model, tea.Cmd) {
+	if m.active == nil {
+		m.state = stateIdle
+		return m, nil
+	}
+
+	err := m.active.doneErr
+	if m.state == stateAborting {
+		// 不回滚，保留消息
+		m.logs = append(m.logs, NewNotice("用户取消了 agent loop，消息已保留。"))
+		m.stopActiveStream()
+		m.state = stateIdle
+		m.refreshLogsViewportContent()
+		return m, nil
+	}
+
+	m.stopActiveStream()
+	if err != nil {
+		m.logs = append(m.logs, NewError(err.Error()))
+	}
+	m.logs = append(m.logs, NewBorder())
+	m.state = stateIdle
+	m.refreshLogsViewportContent()
+	return m, nil
 }
 
 func (m *TuiViewModel) scrollUp(n int) {
