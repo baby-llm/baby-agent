@@ -1,0 +1,9 @@
+{
+  "parallel": {
+    "type": "streamable-http",
+    "url": "https://search.parallel.ai/mcp",
+    "headers": {
+      "User-Agent": "BabyAgent/1.0 (+https://github.com/baby-llm/baby-agent)"
+    }
+  }
+}

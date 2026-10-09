@@ -298,6 +298,7 @@ babyagent_mcp__{serverName}__{toolName}
 - `ch04/mcp.go`：MCP 客户端与 MCP Tool 封装
 - `shared/mcp.go`：MCP 服务器配置解析
 - `mcp-server.json`：MCP 服务器配置（默认文件系统工具）
+- `ch04/mcp-parallel.example.json`：可选的 Parallel Search MCP 配置示例
 
 ---
 
@@ -315,6 +316,28 @@ go run ./ch04/main
 - “使用 MCP 工具列出当前目录下的文件”
 
 如果 MCP 文件系统服务正常启动，你会看到工具调用日志出现在 TUI 中。
+
+### 可选：无 API Key 的网页搜索与抓取
+
+除了默认的文件系统服务，本章还可以接入 [Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp)，
+用 `web_search` 搜索网页、用 `web_fetch` 提取网页内容。匿名端点免费且有速率限制，
+不需要 Parallel API Key；运行 Agent 仍然需要前面配置好的 LLM。
+
+将 `ch04/mcp-parallel.example.json` 中的 `parallel` 对象合并到根目录的
+`mcp-server.json`，保留已有的 `filesystem` 等配置。默认配置不会自动启用 Parallel。
+
+该示例走 Streamable HTTP：`shared/mcp.go` 解析其中的 `url` 与 `headers` 并完成占位符替换，
+`ch04/mcp.go` 的 HTTP 客户端再把这些请求头带到每一次 MCP 请求上。
+
+```bash
+# 在项目根目录运行第四章
+go run ./ch04/main
+```
+
+在 TUI 中输入：“请使用 parallel 的 web_search 查找 Go 官方的 context 文档，
+再用 web_fetch 获取 https://go.dev/blog/context 并总结取消机制。”
+工具在模型侧的名称为 `babyagent_mcp__parallel__web_search` 和
+`babyagent_mcp__parallel__web_fetch`。
 
 ---
 
