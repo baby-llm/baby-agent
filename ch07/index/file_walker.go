@@ -6,7 +6,11 @@ import (
 	"strings"
 )
 
-// FileWalker 负责遍历目录查找文本文件
+// FileWalker 负责遍历目录查找文本文件。
+//
+// 除了构建产物和依赖目录，它还会跳过常见的密钥与本地配置文件。
+// 这是一个防误伤清单，不是安全边界：索引前仍应确认工作区里没有
+// 你不希望进入向量库的内容。
 type FileWalker struct {
 	excludeDirs []string
 	extensions  []string
@@ -19,6 +23,7 @@ func NewFileWalker() *FileWalker {
 			".git", ".idea", ".vscode", "node_modules",
 			"vendor", "dist", "build", "target", "bin",
 			".venv", "venv", "__pycache__", ".cache",
+			".babyagent", ".ssh", ".aws", ".gnupg",
 		},
 		extensions: []string{
 			".go", ".js", ".ts", ".tsx", ".jsx",
@@ -53,29 +58,18 @@ func (fw *FileWalker) Walk(rootPath string) ([]string, error) {
 			return err
 		}
 
-		// 跳过目录
 		if info.IsDir() {
-			// 检查是否在排除列表中
-			baseName := filepath.Base(path)
-			for _, excludeDir := range fw.excludeDirs {
-				if baseName == excludeDir {
-					return filepath.SkipDir
-				}
+			if fw.ShouldExcludeDir(filepath.Base(path)) {
+				return filepath.SkipDir
 			}
 			return nil
 		}
 
-		// 检查文件扩展名
-		ext := strings.ToLower(filepath.Ext(path))
-		valid := false
-		for _, supportedExt := range fw.extensions {
-			if ext == supportedExt {
-				valid = true
-				break
-			}
+		if isSensitiveFile(info.Name()) {
+			return nil
 		}
 
-		if valid {
+		if fw.IsTextFile(path) {
 			files = append(files, path)
 		}
 
@@ -102,6 +96,31 @@ func (fw *FileWalker) ShouldExcludeDir(dirName string) bool {
 		if dirName == excludeDir {
 			return true
 		}
+	}
+	return false
+}
+
+// isSensitiveFile 判断文件是否可能包含密钥或本地私有配置。
+// 索引一个仓库时，把 .env / config.json / 私钥索引进向量库，
+// 后续 semantic_search 就可能把它们原样返回给模型。
+func isSensitiveFile(name string) bool {
+	lower := strings.ToLower(name)
+
+	if lower == ".env" || strings.HasPrefix(lower, ".env.") {
+		return true
+	}
+	if lower == "config.json" ||
+		(strings.HasPrefix(lower, "config.") && (strings.HasSuffix(lower, ".json") || strings.HasSuffix(lower, ".yaml") || strings.HasSuffix(lower, ".yml"))) {
+		return true
+	}
+	switch lower {
+	case "credentials", "credentials.json", "secrets", "secrets.json",
+		"id_rsa", "id_ed25519", "id_ecdsa":
+		return true
+	}
+	switch filepath.Ext(lower) {
+	case ".pem", ".key", ".p12", ".pfx":
+		return true
 	}
 	return false
 }

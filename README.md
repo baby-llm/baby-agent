@@ -243,7 +243,7 @@ go run ./ch09/main
 go run ./ch10/main
 ```
 
-第七章是独立的索引和工具实现，可参考 `ch07/README.md` 中的使用示例。
+第七章提供可运行的索引/搜索 CLI（需要 PostgreSQL + pgvector 与 Embedding 服务），运行方式和 Agent 接入示例见 `ch07/README.md`。
 
 ---
 

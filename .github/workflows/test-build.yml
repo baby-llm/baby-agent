@@ -37,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        chapter: [ch01, ch02, ch03, ch04, ch05, ch06, ch08, ch09, ch10]
+        chapter: [ch01, ch02, ch03, ch04, ch05, ch06, ch07, ch08, ch09, ch10]
     steps:
       - name: Checkout
         uses: actions/checkout@v5

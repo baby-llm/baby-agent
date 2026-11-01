@@ -18,16 +18,16 @@ type SemanticSearchParams struct {
 
 // SemanticSearchTool 语义搜索工具
 type SemanticSearchTool struct {
-	embedService  shared.EmbeddingService
-	vectorStore   shared.VectorStore
-	rerankService shared.RerankService
+	embedService  rag.EmbeddingService
+	vectorStore   rag.VectorStore
+	rerankService rag.RerankService
 }
 
 // NewSemanticSearchTool 创建语义搜索工具
 func NewSemanticSearchTool(
-	embedService shared.EmbeddingService,
-	vectorStore shared.VectorStore,
-	rerankService shared.RerankService,
+	embedService rag.EmbeddingService,
+	vectorStore rag.VectorStore,
+	rerankService rag.RerankService,
 ) *SemanticSearchTool {
 	return &SemanticSearchTool{
 		embedService:  embedService,
@@ -54,7 +54,7 @@ func (s *SemanticSearchTool) Info() openai.ChatCompletionToolUnionParam {
 					"description": "搜索查询文本，例如：\"如何在Go中处理错误\"",
 				},
 				"top_k": map[string]any{
-					"type":        "int",
+					"type":        "integer",
 					"description": "返回结果数量，默认为5",
 				},
 			},
@@ -93,13 +93,13 @@ func (s *SemanticSearchTool) Execute(ctx context.Context, argumentsInJSON string
 	}
 
 	// 3. 提取候选文档块用于重排序
-	candidates := make([]shared.Chunk, len(vectorResults))
+	candidates := make([]rag.Chunk, len(vectorResults))
 	for i, result := range vectorResults {
 		candidates[i] = result.Chunk
 	}
 
 	// 4. 重排序
-	var rerankedChunks []shared.Chunk
+	var rerankedChunks []rag.Chunk
 	if s.rerankService != nil {
 		rerankedChunks, err = s.rerankService.Rerank(ctx, params.Query, candidates)
 		if err != nil {
@@ -110,12 +110,17 @@ func (s *SemanticSearchTool) Execute(ctx context.Context, argumentsInJSON string
 		rerankedChunks = candidates
 	}
 
-	// 5. 格式化结果
+	// 5. 重排序候选通常比 top_k 多，最终只返回请求的数量。
+	if params.TopK > 0 && len(rerankedChunks) > params.TopK {
+		rerankedChunks = rerankedChunks[:params.TopK]
+	}
+
+	// 6. 格式化结果
 	return s.formatResults(params.Query, rerankedChunks, len(vectorResults)), nil
 }
 
 // formatResults 格式化搜索结果为可读字符串
-func (s *SemanticSearchTool) formatResults(query string, chunks []shared.Chunk, totalCandidates int) string {
+func (s *SemanticSearchTool) formatResults(query string, chunks []rag.Chunk, totalCandidates int) string {
 	result := fmt.Sprintf("语义搜索结果 (查询: %s)\n", query)
 	result += fmt.Sprintf("从 %d 个候选中重排序，返回前 %d 个结果：\n\n", totalCandidates, len(chunks))
 

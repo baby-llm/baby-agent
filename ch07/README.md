@@ -35,9 +35,41 @@
 
 ### 配置 Embedding 和 Rerank 服务
 
-本章使用兼容 OpenAI API 格式的 Embedding 和 Rerank 服务。你需要配置 `HTTPEmbeddingConfig` 和 `HTTPRerankConfig`。
+本章使用兼容 OpenAI API 格式的 Embedding 和 Rerank 服务：
 
-相关代码：`ch07/rag/embedding.go`、`ch07/rag/rerank.go`
+- Embedding：`POST /embeddings`，返回 `data[0].embedding`
+- Rerank（可选）：`POST /rerank`，返回 `results[].index` / `relevance_score`
+
+相关代码：`ch07/rag/embedding.go`、`ch07/rag/rerank.go`。
+
+### 运行本章
+
+本章提供一个可运行的 CLI，索引和检索可以分开执行：
+
+```bash
+# 1) 索引一个目录（示例：当前仓库）
+export CH07_PG_DSN="host=localhost port=5432 user=postgres password=postgres dbname=babyagent sslmode=disable"
+export CH07_EMBED_BASE_URL="https://api.openai.com/v1"
+export CH07_EMBED_API_KEY="$OPENAI_API_KEY"
+
+go run ./ch07/main -index . -dimensions 1536 -chunker line
+
+# 2) 语义搜索
+go run ./ch07/main -q "Agent 如何管理上下文" -top-k 5
+
+# 3) 可选：开启 rerank
+go run ./ch07/main -q "Agent 如何管理上下文" \
+  -rerank-base-url "https://your-rerank-endpoint" \
+  -rerank-api-key "$CH07_RERANK_API_KEY"
+```
+
+也可以直接用 flag 传参：`-dsn`、`-embed-base-url`、`-embed-api-key`、`-dimensions`、`-chunker`、`-max-lines`、`-max-chars`、`-concurrency`。
+
+> **注意**
+> - `-dimensions` 必须和 Embedding 模型输出维度一致（例如 `text-embedding-3-small` 是 1536，本章默认配置是 512）。维度改变后需要先 `DROP TABLE document_chunks`，否则 `initTable` 会直接报维度不匹配。
+> - 建表时会自动执行 `CREATE EXTENSION IF NOT EXISTS vector`；数据库账号需要有安装扩展的权限，或者提前由 DBA 安装好 pgvector。
+> - 索引器默认跳过 `.env`、`config*.json`、`*.pem`/`*.key`、`.babyagent/` 等敏感或本地目录；这不是安全边界，索引前仍应确认工作区内容。
+> - 本章代码已实现：Line/Paragraph 切分、HTTP Embedding/Rerank、pgvector 存储、增量索引、Semantic Search CLI。AST 切分、全文搜索、混合搜索是扩展设计，尚未实现。
 
 ---
 
@@ -427,20 +459,24 @@ type RerankService interface {
 **工具定义**：
 ```go
 type SemanticSearchTool struct {
-    embedService  shared.EmbeddingService
-    vectorStore   shared.VectorStore
-    rerankService shared.RerankService
+    embedService  rag.EmbeddingService
+    vectorStore   rag.VectorStore
+    rerankService rag.RerankService
 }
 ```
 
-**工具信息**：
+**工具信息**（实际生成的 JSON Schema）：
 ```json
 {
   "name": "semantic_search",
   "description": "在向量库中进行语义搜索，查找与查询相关的文档片段",
   "parameters": {
-    "query": "搜索查询文本",
-    "top_k": "返回结果数量，默认为5"
+    "type": "object",
+    "properties": {
+      "query": { "type": "string", "description": "搜索查询文本" },
+      "top_k": { "type": "integer", "description": "返回结果数量，默认为5" }
+    },
+    "required": ["query"]
   }
 }
 ```
@@ -498,8 +534,21 @@ files, err := fileWalker.Walk("/path/to/repo")
 
 **创建索引器**：
 ```go
-embedConfig := rag.DefaultHTTPEmbeddingConfig("your-api-key")
-embedService := rag.NewHTTPEmbeddingService(embedConfig)
+embedService := rag.NewHTTPEmbeddingService(rag.HTTPEmbeddingConfig{
+    APIKey:     os.Getenv("CH07_EMBED_API_KEY"),
+    BaseURL:    os.Getenv("CH07_EMBED_BASE_URL"),
+    Model:      "text-embedding-3-small",
+    Dimensions: 1536,
+})
+
+store, err := db.NewPGVectorStore(db.Config{
+    DSN:       os.Getenv("CH07_PG_DSN"),
+    Dimension: 1536,
+})
+if err != nil {
+    log.Fatal(err)
+}
+defer store.Close()
 
 indexerConfig := index.IndexerConfig{
     RootPath:    "/path/to/repo",
@@ -510,6 +559,21 @@ indexerConfig := index.IndexerConfig{
 
 indexer := index.NewIndexer(indexerConfig, store, embedService)
 ```
+
+**接入 Agent**：`SemanticSearchTool` 实现了与 ch06/ch09 相同的 `ToolName / Info / Execute` 方法集，可以直接追加到 Agent 的工具列表：
+
+```go
+searchTool := ch07tool.NewSemanticSearchTool(embedService, store, nil)
+
+tools := []ch06tool.Tool{
+    ch06tool.NewReadTool(),
+    ch06tool.CreateBashTool(shared.GetWorkspaceDir()),
+    ch06tool.NewLoadStorageTool(memoryStorage),
+}
+tools = append(tools, searchTool) // 方法集一致，可直接追加
+```
+
+这样模型会在需要查代码/文档时自主调用 `semantic_search`，而不是由外层代码硬编码检索时机。
 
 ---
 

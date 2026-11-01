@@ -15,25 +15,25 @@ import (
 type Indexer struct {
 	rootPath     string
 	fileWalker   *FileWalker
-	chunker      shared.ChunkerService
-	vectorStore  shared.VectorStore
-	embedService shared.EmbeddingService
+	chunker      rag.ChunkerService
+	vectorStore  rag.VectorStore
+	embedService rag.EmbeddingService
 }
 
 // IndexerConfig 索引器配置
 type IndexerConfig struct {
 	RootPath    string
-	ChunkerType shared.ChunkerType
+	ChunkerType rag.ChunkerType
 	MaxLines    int
 	MaxChars    int
 }
 
 // NewIndexer 创建新的索引器
-func NewIndexer(config IndexerConfig, vectorStore shared.VectorStore, embedService shared.EmbeddingService) *Indexer {
+func NewIndexer(config IndexerConfig, vectorStore rag.VectorStore, embedService rag.EmbeddingService) *Indexer {
 	return &Indexer{
 		rootPath:     config.RootPath,
 		fileWalker:   NewFileWalker(),
-		chunker:      shared.NewChunker(config.ChunkerType, config.MaxLines, config.MaxChars),
+		chunker:      rag.NewChunker(config.ChunkerType, config.MaxLines, config.MaxChars),
 		vectorStore:  vectorStore,
 		embedService: embedService,
 	}
@@ -152,6 +152,8 @@ func (idx *Indexer) indexFile(ctx context.Context, filePath string) (*FileIndexR
 	if err != nil {
 		relPath = filePath
 	}
+	// Use forward slashes so document IDs are stable across Windows/Linux.
+	relPath = filepath.ToSlash(relPath)
 
 	// 获取文件信息（用于检查修改时间）
 	fileInfo, err := os.Stat(filePath)
@@ -176,10 +178,6 @@ func (idx *Indexer) indexFile(ctx context.Context, filePath string) (*FileIndexR
 			}, nil
 		}
 
-		// 文件已修改，删除旧记录
-		if err := idx.vectorStore.DeleteByDocument(ctx, relPath); err != nil {
-			return nil, fmt.Errorf("failed to delete old index: %w", err)
-		}
 	}
 
 	// 读取文件内容
@@ -191,18 +189,21 @@ func (idx *Indexer) indexFile(ctx context.Context, filePath string) (*FileIndexR
 	// 切分文本
 	chunks := idx.chunker.Chunk(relPath, string(content))
 	if len(chunks) == 0 {
+		// 文件被清空时也要清掉旧索引。
+		if err := idx.vectorStore.ReplaceDocument(ctx, relPath, nil); err != nil {
+			return nil, fmt.Errorf("failed to clear old index: %w", err)
+		}
 		return &FileIndexResult{Chunks: 0, Action: IndexActionSkip}, nil
 	}
 
-	// 获取向量嵌入
+	// 先完成全部嵌入，再在一个事务里替换旧索引；嵌入失败时旧索引保持可用。
 	vectorPoints, err := idx.embedChunks(ctx, chunks)
 	if err != nil {
 		return nil, fmt.Errorf("failed to embed chunks: %w", err)
 	}
 
-	// 批量插入数据库
-	if err := idx.vectorStore.InsertBatch(ctx, vectorPoints); err != nil {
-		return nil, fmt.Errorf("failed to insert vectors: %w", err)
+	if err := idx.vectorStore.ReplaceDocument(ctx, relPath, vectorPoints); err != nil {
+		return nil, fmt.Errorf("failed to replace document index: %w", err)
 	}
 
 	// 确定操作类型
@@ -218,38 +219,59 @@ func (idx *Indexer) indexFile(ctx context.Context, filePath string) (*FileIndexR
 	}, nil
 }
 
-// embedChunks 批量获取向量嵌入
-func (idx *Indexer) embedChunks(ctx context.Context, chunks []shared.Chunk) ([]shared.VectorPoint, error) {
-	vectorPoints := make([]shared.VectorPoint, len(chunks))
+// embedChunks 批量获取向量嵌入。
+//
+// 使用固定大小的 worker 池，避免为每个 chunk 起一个 goroutine：
+// 索引一个仓库时 chunk 数量可能上万，无限制并发会同时打爆 embedding
+// 服务的限流和本地内存。
+func (idx *Indexer) embedChunks(ctx context.Context, chunks []rag.Chunk) ([]rag.VectorPoint, error) {
+	vectorPoints := make([]rag.VectorPoint, len(chunks))
 
+	const maxWorkers = 8
+	workers := maxWorkers
+	if len(chunks) < workers {
+		workers = len(chunks)
+	}
+
+	jobs := make(chan int)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var firstErr error
 
-	for i, chunk := range chunks {
-		wg.Add(1)
-		go func(chunkIdx int, c shared.Chunk) {
-			defer wg.Done()
-
-			vector, err := idx.embedService.Embed(ctx, c.Content)
-			if err != nil {
-				mu.Lock()
-				if firstErr == nil {
-					firstErr = err
-				}
-				mu.Unlock()
-				return
-			}
-
-			mu.Lock()
-			vectorPoints[chunkIdx] = shared.VectorPoint{
-				Vector: vector,
-				Chunk:  c,
-			}
-			mu.Unlock()
-		}(i, chunk)
+	setErr := func(err error) {
+		mu.Lock()
+		if firstErr == nil {
+			firstErr = err
+		}
+		mu.Unlock()
 	}
 
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range jobs {
+				if err := ctx.Err(); err != nil {
+					setErr(err)
+					continue
+				}
+				vector, err := idx.embedService.Embed(ctx, chunks[i].Content)
+				if err != nil {
+					setErr(err)
+					continue
+				}
+				vectorPoints[i] = rag.VectorPoint{
+					Vector: vector,
+					Chunk:  chunks[i],
+				}
+			}
+		}()
+	}
+
+	for i := range chunks {
+		jobs <- i
+	}
+	close(jobs)
 	wg.Wait()
 
 	if firstErr != nil {
@@ -260,7 +282,7 @@ func (idx *Indexer) embedChunks(ctx context.Context, chunks []shared.Chunk) ([]s
 }
 
 // Search 在索引中搜索相似内容
-func (idx *Indexer) Search(ctx context.Context, query string, limit int) ([]shared.VectorPointResult, error) {
+func (idx *Indexer) Search(ctx context.Context, query string, limit int) ([]rag.VectorPointResult, error) {
 	queryVector, err := idx.embedService.Embed(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to embed query: %w", err)

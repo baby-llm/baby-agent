@@ -1,8 +1,9 @@
-package shared
+package rag
 
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 )
@@ -33,6 +34,7 @@ type HTTPRerankService struct {
 func NewHTTPRerankService(config HTTPRerankConfig) *HTTPRerankService {
 	client := resty.New().
 		SetBaseURL(config.BaseURL).
+		SetTimeout(60*time.Second).
 		SetHeader("Authorization", "Bearer "+config.APIKey).
 		SetHeader("Content-Type", "application/json")
 
@@ -71,6 +73,9 @@ func (s *HTTPRerankService) Rerank(ctx context.Context, query string, candidates
 	if len(candidates) == 0 {
 		return candidates, nil
 	}
+	if s.config.BaseURL == "" {
+		return nil, fmt.Errorf("rerank base URL is not configured")
+	}
 
 	// 构建请求
 	documents := make([]string, len(candidates))
@@ -91,14 +96,20 @@ func (s *HTTPRerankService) Rerank(ctx context.Context, query string, candidates
 		SetBody(req).
 		SetResult(&resp)
 
-	_, err := r.Post("/rerank")
+	httpResp, err := r.Post("/rerank")
 	if err != nil {
 		return nil, fmt.Errorf("failed to call rerank API: %w", err)
+	}
+	if httpResp.IsError() {
+		return nil, fmt.Errorf("rerank API returned %s: %s", httpResp.Status(), httpResp.String())
 	}
 
 	// 根据重排序结果重新组织候选文档
 	result := make([]Chunk, len(resp.Results))
 	for i, item := range resp.Results {
+		if item.Index < 0 || item.Index >= len(candidates) {
+			return nil, fmt.Errorf("rerank returned invalid index %d (candidates: %d)", item.Index, len(candidates))
+		}
 		result[i] = candidates[item.Index]
 	}
 

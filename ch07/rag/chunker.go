@@ -1,9 +1,6 @@
-package shared
+package rag
 
-import (
-	"bufio"
-	"strings"
-)
+import "strings"
 
 // ChunkerType 切分器类型
 type ChunkerType string
@@ -110,64 +107,63 @@ func NewParagraphChunker(maxParagraphs int) *ParagraphChunker {
 	}
 }
 
-// Chunk 实现 ChunkerService 接口
+// Chunk 实现 ChunkerService 接口。
+//
+// 段落之间以空行分隔；每 maxParagraphs 个段落组成一个块。
+// StartPos/EndPos 使用 1-based 行号，便于在搜索结果里定位原文。
 func (c *ParagraphChunker) Chunk(documentID, content string) []Chunk {
+	lines := strings.Split(content, "\n")
+
 	var chunks []Chunk
-	scanner := bufio.NewScanner(strings.NewReader(content))
-
-	currentParagraphs := []string{}
+	var buf []string
 	startLine := 1
-	currentLine := 1
+	paragraphs := 0
+	prevBlank := true
 
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		// 空行表示段落结束
-		if strings.TrimSpace(line) == "" {
-			if len(currentParagraphs) > 0 {
-				chunks = append(chunks, Chunk{
-					Content: strings.Join(currentParagraphs, "\n"),
-					Meta: Meta{
-						DocumentID: documentID,
-						StartPos:   startLine,
-						EndPos:     currentLine - 1,
-					},
-				})
-				currentParagraphs = []string{}
-			}
-			currentLine++
-			startLine = currentLine
-			continue
+	flush := func(endLine int) {
+		if len(buf) == 0 {
+			return
 		}
-
-		currentParagraphs = append(currentParagraphs, line)
-		currentLine++
-
-		// 检查是否需要开始新的块
-		if len(currentParagraphs) >= c.maxParagraphs {
-			chunks = append(chunks, Chunk{
-				Content: strings.Join(currentParagraphs, "\n"),
-				Meta: Meta{
-					DocumentID: documentID,
-					StartPos:   startLine,
-					EndPos:     currentLine - 1,
-				},
-			})
-			currentParagraphs = []string{}
+		text := strings.Trim(strings.Join(buf, "\n"), "\n")
+		if strings.TrimSpace(text) == "" {
+			buf = nil
+			return
 		}
-	}
-
-	// 处理最后一个段落
-	if len(currentParagraphs) > 0 {
 		chunks = append(chunks, Chunk{
-			Content: strings.Join(currentParagraphs, "\n"),
+			Content: text,
 			Meta: Meta{
 				DocumentID: documentID,
 				StartPos:   startLine,
-				EndPos:     currentLine - 1,
+				EndPos:     endLine,
 			},
 		})
+		buf = nil
+		paragraphs = 0
 	}
 
+	for i, line := range lines {
+		lineNum := i + 1
+		blank := strings.TrimSpace(line) == ""
+		// Ignore blank lines before the first paragraph of a chunk.
+		if blank && len(buf) == 0 {
+			prevBlank = true
+			continue
+		}
+		if len(buf) == 0 {
+			startLine = lineNum
+		}
+		buf = append(buf, line)
+
+		if blank && !prevBlank {
+			paragraphs++
+			if paragraphs >= c.maxParagraphs {
+				flush(lineNum)
+				startLine = lineNum + 1
+			}
+		}
+		prevBlank = blank
+	}
+
+	flush(len(lines))
 	return chunks
 }

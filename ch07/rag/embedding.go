@@ -1,8 +1,9 @@
-package shared
+package rag
 
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 )
@@ -35,6 +36,7 @@ type HTTPEmbeddingService struct {
 func NewHTTPEmbeddingService(config HTTPEmbeddingConfig) *HTTPEmbeddingService {
 	client := resty.New().
 		SetBaseURL(config.BaseURL).
+		SetTimeout(60*time.Second).
 		SetHeader("Authorization", "Bearer "+config.APIKey).
 		SetHeader("Content-Type", "application/json")
 
@@ -69,6 +71,10 @@ type embeddingResponse struct {
 
 // Embed 将文本转换为向量
 func (s *HTTPEmbeddingService) Embed(ctx context.Context, text string) (Vector, error) {
+	if s.config.BaseURL == "" {
+		return nil, fmt.Errorf("embedding base URL is not configured")
+	}
+
 	var resp embeddingResponse
 
 	req := embeddingRequest{
@@ -86,9 +92,12 @@ func (s *HTTPEmbeddingService) Embed(ctx context.Context, text string) (Vector, 
 		SetBody(req).
 		SetResult(&resp)
 
-	_, err := r.Post("/embeddings")
+	httpResp, err := r.Post("/embeddings")
 	if err != nil {
 		return nil, fmt.Errorf("failed to call embedding API: %w", err)
+	}
+	if httpResp.IsError() {
+		return nil, fmt.Errorf("embedding API returned %s: %s", httpResp.Status(), httpResp.String())
 	}
 
 	if len(resp.Data) == 0 {

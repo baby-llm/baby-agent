@@ -1,4 +1,4 @@
-package shared
+package rag
 
 import (
 	"context"
@@ -44,6 +44,10 @@ type ChunkerService interface {
 type VectorStore interface {
 	// InsertBatch 批量插入向量点
 	InsertBatch(ctx context.Context, vps []VectorPoint) error
+
+	// ReplaceDocument 在一个事务里替换指定文档的所有向量点。
+	// 调用方应先完成嵌入，避免嵌入失败时删掉已有索引。
+	ReplaceDocument(ctx context.Context, documentID string, vps []VectorPoint) error
 
 	// Search 执行向量相似度搜索
 	Search(ctx context.Context, queryVector Vector, limit int) ([]VectorPointResult, error)
