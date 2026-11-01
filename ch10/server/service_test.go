@@ -95,6 +95,11 @@ func newTestServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatalf("InitDB() error = %v", err)
 	}
+	t.Cleanup(func() {
+		if err := CloseDB(db); err != nil {
+			t.Errorf("CloseDB() error = %v", err)
+		}
+	})
 
 	return NewServer(db, nil)
 }

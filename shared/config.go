@@ -30,7 +30,9 @@ func NewModelConfig() ModelConfig {
 }
 
 func getEnvDefault(key, defaultValue string) string {
-	if value, ok := os.LookupEnv(key); ok {
+	// Empty values (e.g. `KEY=` in .env.example) intentionally fall back to the
+	// default, so copying the example file and only filling the API key works.
+	if value, ok := os.LookupEnv(key); ok && value != "" {
 		return value
 	}
 	return defaultValue

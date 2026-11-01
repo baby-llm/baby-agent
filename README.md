@@ -160,13 +160,21 @@
 
 ## 🛠 开发环境准备
 
-1.  **安装 Go:** 确保本地已安装 Go 1.24 或更高版本。
+1.  **安装 Go:** 确保本地已安装 Go 1.25 或更高版本。
 2.  **获取 API Key:** 你需要一个 LLM 供应商的 API Key（如 OpenAI, 或国内的 DeepSeek/GLM）。
-3.  **配置文件:**
+3.  **配置文件（按章节分两套）:**
     ```bash
+    # ch01-ch04：单模型配置
     cp .env.example .env
-    # 编辑 .env 文件，填入你的 API_KEY
+    # 编辑 .env，填入 OPENAI_API_KEY；BASE_URL / MODEL 留空会使用默认值
+
+    # ch05-ch10：前台模型 + 后台模型（摘要 / 记忆更新）
+    cp config.example.json config.json
+    # 编辑 config.json，填入 front_model 与 back_model
+    # config.json 已被 .gitignore 忽略，不会提交
     ```
+4.  **MCP（可选，ch04 起）:** 按需修改根目录 `mcp-server.json`；默认配置需要本地有 `npx`。
+5.  **RAG（可选，ch07）:** 需要 PostgreSQL + pgvector，以及 Embedding / Rerank 服务，详见 `ch07/README.md`。
 
 ---
 

@@ -39,3 +39,14 @@ func InitDB(dsn string) (*gorm.DB, error) {
 	}
 	return db, nil
 }
+
+// CloseDB closes the underlying SQL connection. Callers should defer it on
+// shutdown; tests must call it before t.TempDir() cleanup, otherwise Windows
+// cannot remove the still-open SQLite file.
+func CloseDB(db *gorm.DB) error {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Close()
+}

@@ -24,6 +24,11 @@ func main() {
 		log.Errorf("Failed to initialize database: %v", err)
 		panic(err)
 	}
+	defer func() {
+		if err := server.CloseDB(db); err != nil {
+			log.Errorf("Failed to close database: %v", err)
+		}
+	}()
 
 	a := agent.NewAgent(appConf.LLMProviders.FrontModel, agent.SystemPrompt, []tool.Tool{tool.NewBashTool()})
 	s := server.NewServer(db, a)
