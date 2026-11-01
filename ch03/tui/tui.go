@@ -88,9 +88,12 @@ type activeStream struct {
 	events <-chan ch03.MessageVO
 	cancel context.CancelFunc
 
-	turnLogLen  int
-	reasonBody  int
-	contentBody int
+	turnLogLen   int
+	reasonBody   int
+	contentBody  int
+	streamClosed bool
+	doneReceived bool
+	doneErr      error
 }
 
 type TuiViewModel struct {
@@ -187,7 +190,10 @@ func (m *TuiViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleStreamMsg(msg)
 	case streamClosedMsg:
 		if m.active != nil {
-			m.active.events = nil
+			m.active.streamClosed = true
+			if m.active.doneReceived {
+				return m.finalizeActiveStream()
+			}
 		}
 		return m, nil
 	case streamDoneMsg:
@@ -311,11 +317,14 @@ func (m *TuiViewModel) resetOutputSection() {
 }
 
 func (m *TuiViewModel) handleStreamMsg(msg streamMsg) (tea.Model, tea.Cmd) {
-	if m.active == nil || m.active.events == nil {
+	if m.active == nil {
 		return m, nil
 	}
 	m.handleStreamEvent(msg.event)
 	m.refreshLogsViewportContent()
+	if m.active.streamClosed {
+		return m, nil
+	}
 	return m, waitStreamEvent(m.active.events)
 }
 
@@ -325,16 +334,33 @@ func (m *TuiViewModel) handleStreamDone(msg streamDoneMsg) (tea.Model, tea.Cmd) 
 		return m, nil
 	}
 
-	m.stopActiveStream()
-	if m.state == stateAborting {
-		m.rollbackTurn()
-		m.notice = "已取消本轮输入。"
+	m.active.doneReceived = true
+	m.active.doneErr = msg.err
+	if !m.active.streamClosed {
+		return m, nil
+	}
+
+	return m.finalizeActiveStream()
+}
+
+func (m *TuiViewModel) finalizeActiveStream() (tea.Model, tea.Cmd) {
+	if m.active == nil {
 		m.state = stateIdle
 		return m, nil
 	}
 
-	if msg.err != nil {
-		m.logs = append(m.logs, NewError(msg.err.Error()))
+	err := m.active.doneErr
+	if m.state == stateAborting {
+		m.rollbackTurn()
+		m.notice = "已取消本轮输入。"
+		m.stopActiveStream()
+		m.state = stateIdle
+		return m, nil
+	}
+
+	m.stopActiveStream()
+	if err != nil {
+		m.logs = append(m.logs, NewError(err.Error()))
 	}
 	m.logs = append(m.logs, NewBorder())
 	m.state = stateIdle

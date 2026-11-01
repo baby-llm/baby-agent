@@ -190,7 +190,6 @@ func (m *TuiViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleStreamMsg(msg)
 	case streamClosedMsg:
 		if m.active != nil {
-			m.active.events = nil
 			m.active.streamClosed = true
 			if m.active.doneReceived {
 				return m.finalizeActiveStream()
@@ -318,11 +317,14 @@ func (m *TuiViewModel) resetOutputSection() {
 }
 
 func (m *TuiViewModel) handleStreamMsg(msg streamMsg) (tea.Model, tea.Cmd) {
-	if m.active == nil || m.active.events == nil {
+	if m.active == nil {
 		return m, nil
 	}
 	m.handleStreamEvent(msg.event)
 	m.refreshLogsViewportContent()
+	if m.active.streamClosed {
+		return m, nil
+	}
 	return m, waitStreamEvent(m.active.events)
 }
 
