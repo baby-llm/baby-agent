@@ -1,5 +1,7 @@
 # 第一章：初识 LLM（Raw HTTP 与 OpenAI SDK）
 
+> **前置**：无（Go 1.25+ 与可用 API Key）｜**本章新增**：Raw HTTP / SDK 调用、SSE 流式输出｜**下一章**：ch02
+
 欢迎来到第一章！作为后端工程师，我们每天都在和各种 API 打交道。AI 大模型的调用本质上也是一次 HTTP 请求。
 
 本章的目标是带你**拨开 SDK 的迷雾，直视大模型调用的本质**。我们将分别使用 Go 标准库 `net/http`（原生手写请求）和官方 `openai-go` SDK 来完成同一个任务：向 LLM 发起对话。这不仅能帮助你深刻理解 OpenAI 协议与 SSE（流式输出）机制，更为后续开发健壮的 AI Agent 奠定坚实的基础。
@@ -73,7 +75,7 @@ data: [DONE]
 本项目提供了两套完整的实现，通过命令行参数进行切换。
 
 ### 方式一：使用官方 SDK (推荐在生产使用)
-在 `sdk.go` 中，我们使用了官方的 `github.com/openai/openai-go`。代码非常简洁：
+在 `sdk.go` 中，我们使用了官方的 `github.com/openai/openai-go/v3`。代码非常简洁：
 ```go
 // 流式调用的核心逻辑
 stream := client.Chat.Completions.NewStreaming(ctx, req)

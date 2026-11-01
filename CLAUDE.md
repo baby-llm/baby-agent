@@ -1,264 +1,98 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code / AI agents working in this repository. See `AGENTS.md` for contribution conventions and `README.md` for the public roadmap.
 
 ## Project Overview
 
-BabyAgent is a Go-based AI Agent development tutorial that builds a Claude Code-like assistant from scratch. Each chapter (ch01-ch12) is a standalone module that progressively adds capabilities:
+BabyAgent is a Go tutorial that builds a Claude Code-like agent from first principles. It is a **single Go module** (`module babyagent`) with 12 chapters. Each chapter is a runnable snapshot; later chapters intentionally copy earlier code.
 
-- **ch01-03**: Basic LLM interaction, tool calling, TUI visualization
-- **ch04-06**: MCP protocol integration, context engineering, memory system
-- **ch07**: Agentic RAG with vector search (pgvector)
-- **ch08**: Sandbox/security with Docker isolation and tool confirmation
-- **ch09**: Skills system for task-specific guidance
-- **ch10+**: Web services, evaluation, observability (planned)
+- ch01: raw HTTP + OpenAI SDK, SSE streaming
+- ch02: tool calling + minimal agent loop
+- ch03: reasoning fields + Bubble Tea TUI
+- ch04: MCP client and namespaced tools
+- ch05: context engineering (truncate/offload/summarize)
+- ch06: two-level memory (global/workspace)
+- ch07: Agentic RAG (pgvector, embedding, rerank, CLI)
+- ch08: Docker sandbox + human-in-the-loop confirmation
+- ch09: skills (progressive loading + `load_skill`)
+- ch10: HTTP/SSE service + SQLite conversation tree
+- ch11: observability (OpenTelemetry + Prometheus + AgentTrace)
+- ch12: offline evaluation with a Mock LLM
 
-Chapters ch01-ch09 are complete. The current implementation combines all features into a full-featured agent.
+The official OpenAI SDK is replaced by the `baby-llm/openai-go` fork (see `go.mod`), which adds native `reasoning_content` support for thinking providers such as DeepSeek. Do not reintroduce manual `SetExtraFields` hacks for that field.
 
 ## Common Commands
 
-### Running Chapters
 ```bash
-# Run individual chapters (each has a TUI interface)
-go run ./ch03/main    # Chapter 3: TUI visualization
-go run ./ch04/main    # Chapter 4: MCP integration
-go run ./ch05/main    # Chapter 5: Context management
-go run ./ch06/main    # Chapter 6: Memory system
-go run ./ch08/main    # Chapter 8: Full agent with guardrails
-go run ./ch09/main    # Chapter 9: Full agent with skills system (latest)
-```
+# Configuration
+cp .env.example .env                  # ch01-ch04
+cp config.example.json config.json    # ch05-ch11
 
-### Testing
-```bash
-# Run all tests
+# Run
+go run ./ch01/main --stream -q "hello"
+go run ./ch03/main                    # TUI
+go run ./ch07/main -index . -q "..."  # RAG CLI; needs PG + embedding service
+go run ./ch10/main                    # HTTP/SSE on :8080
+go run ./ch11/main                    # observability service on :8080
+go run ./ch12/main                    # offline eval, no API key
+
+# Verify
 go test ./...
-
-# Run tests for specific chapter
-go test ./ch08/context/...
-go test ./ch08/... -v
-go test ./ch09/skill/... -v
-
-# Run a single test
-go test -v ./ch08/context/... -run TestTruncatePolicyApply
+go vet ./...
+gofmt -l .
+pnpm --dir frontend lint && pnpm --dir frontend build
 ```
 
-### Building
-```bash
-# Build a chapter's main executable
-go build -o bin/ch09 ./ch09/main
-```
+## Configuration
 
-## Configuration Requirements
+- ch01–ch04: `.env` with `OPENAI_API_KEY`; `OPENAI_BASE_URL` / `OPENAI_MODEL` fall back to defaults when empty.
+- ch05–ch11: `config.json` with `llm_providers.front_model` and `llm_providers.back_model` (`base_url`, `api_key`, `model`, `context_window`).
+- ch04+: optional `mcp-server.json`; default filesystem server needs `npx`.
+- ch07: `CH07_PG_DSN`, `CH07_EMBED_BASE_URL`, `CH07_EMBED_API_KEY`, optional rerank vars; see `ch07/README.md`.
 
-Before running any chapter, set up the environment:
+`.env` and `config.json` are gitignored. Never commit secrets.
 
-1. **Copy example configs:**
-   ```bash
-   cp .env.example .env
-   cp config.example.json config.json
-   ```
+## Architecture
 
-2. **Configure LLM providers** in `config.json`:
-   - `front_model`: Main chat model (e.g., gpt-4o, deepseek-chat)
-   - `back_model`: Cheaper model for summarization/memory updates
-   - Both require: `base_url`, `api_key`, `model`, `context_window`
+### Agent loop
 
-3. **Optional: Configure MCP servers** in `mcp-server.json` for extending agent capabilities
+`RunStreaming` builds `[system] + history + user`, calls the Chat Completions streaming API, accumulates chunks with `ChatCompletionAccumulator`, emits reasoning/content/tool events, executes tools, appends assistant/tool messages, and repeats until no tool calls remain.
 
-## Architecture Overview
+Key invariants:
+- Call `stream.Close()` after each streaming round (the stream is recreated inside the loop; `defer` would leak).
+- Reasoning is parsed from the SDK delta; `message.ToParam()` carries `reasoning_content` back on tool turns via the fork.
+- SSE/stream sends must be cancellation-aware (`select` on `ctx.Done()`); a browser disconnect must not block the agent goroutine.
 
-### Core Components (ch08)
+### Chapter-specific layers
 
-```
-ch08/ or ch09/
-├── agent.go          # Main Agent: orchestrates LLM calls, tool execution, streaming
-├── context/
-│   ├── engine.go     # ContextEngine: manages conversation history, applies policies
-│   ├── policy.go     # Policy interface: truncate, offload, summarize strategies
-│   ├── policy_*.go   # Policy implementations
-│   └── share.go      # Token counting with tiktoken-go
-├── memory/
-│   ├── memory.go     # Memory interface: global + workspace memory
-│   └── update.go     # LLM-driven memory extraction/update
-├── storage/
-│   ├── storage.go    # Storage interface for persistence
-│   └── filesystem.go # File system storage implementation
-├── tool/
-│   ├── tool.go       # Tool interface
-│   ├── bash.go       # Shell command execution
-│   ├── docker_bash.go # Docker-isolated shell execution (ch08+)
-│   ├── load_storage.go # Load offloaded content
-│   └── load_skill.go  # Load skill content (ch09)
-├── mcp.go            # MCP client integration (Model Context Protocol)
-├── skill/            # Skills system (ch09 only)
-│   ├── skill.go      # Skill manager
-│   └── markdown.go   # Skill file parser
-├── main/             # Main entry point
-│   └── main.go       # TUI application entry
-├── tui/              # Bubble Tea terminal UI
-│   ├── tui.go        # TUI model and update logic
-│   └── entry.go      # Log entry types and rendering
-├── vo.go             # View objects for streaming messages to TUI
-└── prompt.go         # System prompt template with {runtime}, {workspace_path}, {memory}, {skills}
-```
+- ch05 `context`: `Engine` + `Policy` interface (truncate/offload/summarize), token counting, policy events.
+- ch06 `memory`: `MultiLevelMemory` (global + workspace), LLM-driven XML update, filesystem persistence.
+- ch07 `rag`/`db`/`index`/`tool`: chunking, HTTP embedding/rerank, pgvector store, incremental indexing, semantic search.
+- ch08 `tool/docker_bash.go` + confirmation state machine: allow/reject/always-allow; ESC cancels the run.
+- ch09 `skill` + `tool/load_skill.go`: scan `.babyagent/skills/`, inject metadata, load full Markdown on demand.
+- ch10 `agent.StreamEvent` + `server`: transport-agnostic events, SSE, SQLite `Conversation`/`ChatMessage`, tree history.
+- ch11 `observe`: OTel tracer/spans, Prometheus metrics, `AgentTrace` event log; `server` adds `/metrics` and `/api/trace/:id`.
+- ch12 `agent`/`eval`: vendor-neutral `Client`/`Tool` interfaces, `MockClient`, dataset runner, JSON/Markdown report.
 
-### Agent Loop Flow
+### Chapter independence
 
-1. **User Input** → `Agent.RunStreaming(query, viewCh, confirmCh)`
-2. **Context Build** → ContextEngine builds messages with system prompt (includes memory + skills for ch09)
-3. **LLM Call** → Streaming response via openai-go SDK
-4. **Tool Calls** → Check if confirmation needed → Show confirm UI or execute directly
-5. **Confirmation** → User selects Allow/Reject/Always Allow (via `confirmCh`)
-6. **Execute Tools** → Run native tools (bash, read, write, load_skill) or MCP tools
-7. **ESC Handling** → User can cancel anytime; messages preserved, policies/memory skipped
-8. **Normal End** → Apply truncate/offload/summarize policies
-9. **Memory Update** → LLM extracts new facts from conversation
-10. **TUI Display** → Show reasoning, content, tool calls, confirm dialog via MessageVO channel
+- No chapter imports another chapter. Use `babyagent/shared` or the chapter's own copy.
+- When a fix applies to copied files, patch every copy in the same change (e.g. TUI finalization, `stream.Close`, reasoning pass-back).
+- Add a new chapter for a new capability instead of branching an existing one.
 
-### Skill Loading Flow (ch09)
+## Documentation
 
-1. **Agent Startup** → Skill manager scans `.babyagent/skills/` directory
-2. **Metadata Extraction** → Parse YAML front matter (name, description) from each `SKILL.md`
-3. **System Prompt** → Inject skill list into `{skills}` placeholder
-4. **User Request** → LLM analyzes task and identifies relevant skill
-5. **load_skill Call** → LLM calls `load_skill(name="<skill-id>")`
-6. **Skill Content** → Tool reads full Markdown content and returns to LLM
-7. **Task Execution** → LLM follows skill guidance to complete task
+- Principles/design may be ahead of code. Keep them and add `> **实现状态**` notes; do not delete unimplemented sections.
+- Root README owns status/roadmap. Chapter READMEs own run instructions and the delta vs the previous chapter.
+- Community references should be official and dated; prefer the last six months.
 
-### Key Architectural Patterns
+## Testing
 
-**Context Management (ch05)**:
-- Messages wrapped with token counts (`messageWrap`)
-- Policies applied when context usage exceeds thresholds
-- Draft/commit pattern: `StartTurn()` → modify → `CommitTurn()` or `AbortTurn()`
-- Policy event hooks notify TUI during execution
+- Put tests next to the code under test; use `Test<Feature>_<Scenario>`.
+- Use fake/mock LLM and vector-store clients; unit tests must not need network or PostgreSQL.
+- Close SQLite handles in `t.Cleanup` before `t.TempDir()` cleanup.
+- ch12 is the reference for deterministic agent-loop tests.
 
-**Memory System (ch06)**:
-- Two-level: Global (home dir) + Workspace (project dir)
-- LLM-driven extraction: runs a cheaper model to extract facts
-- Memory injected into system prompt via `{memory}` placeholder
+## Frontend
 
-**Tool System**:
-- Native tools: `bash`, `read`, `write`, `edit`, `load_storage`, `load_skill`
-- `bash`: Shell command execution with optional Docker isolation (ch08+)
-- `docker_bash`: Docker-isolated shell execution (auto-detects Docker, falls back to bash)
-- `load_storage`: Load offloaded message content from storage
-- `load_skill`: Load full skill content for LLM guidance (ch09)
-- MCP tools: Namespaced as `babyagent_mcp__<server>__<tool>`
-- Tool results become `openai.ToolMessage` in conversation
-
-**MCP Integration (ch04)**:
-- Connects via stdio (subprocess) or HTTP (SSE)
-- Tool discovery via `ListTools()`, execution via `CallTool()`
-- Workspace variable `${workspaceFolder}` auto-replaced with current dir
-
-**Tool Confirmation (ch08)**:
-- `ToolConfirmConfig.RequireConfirmTools` maps tool names to confirmation requirement
-- Before execution, check if tool requires confirmation AND not in `alwaysAllowTools`
-- If needed, send `MessageTypeToolConfirm` to TUI and wait for `ConfirmationAction`
-- Three actions: `ConfirmAllow`, `ConfirmReject` (terminates loop), `ConfirmAlwaysAllow`
-- `alwaysAllowTools` tracks user's "always allow" choices for current session
-
-**ESC Cancellation (ch08)**:
-- TUI creates `context.WithCancel()` and passes to `Agent.RunStreaming()`
-- User presses ESC → TUI calls `cancel()` → Agent detects `ctx.Done()`
-- On cancel: `CommitTurn(..., skipPoliciesAndMemory=true)` preserves messages without running policies/memory
-- Draft messages are saved to context, allowing user to continue from that point
-
-**Skills System (ch09)**:
-- Skills are descriptive prompts, not code - they guide LLM on how to use tools
-- Progressive loading saves tokens: metadata (~50 tokens) at startup, full content (~500 tokens) on-demand
-- Skill metadata (name + description) injected into `{skills}` placeholder in system prompt
-- LLM calls `load_skill(name="<skill-id>")` when it needs full guidance
-- Skill files in `.babyagent/skills/<skill-id>/SKILL.md` with YAML front matter
-- Skill manager (`skill.Manager`) auto-discovers and loads skills at startup
-- Skills can be shared across projects (workspace-level) or globally (home dir)
-
-## Testing Patterns
-
-Tests use lightweight fakes to avoid LLM API calls:
-
-- **fakeSummarizer**: Returns pre-defined summaries for testing policy logic
-- **fakeStorage**: In-memory key-value store for testing offload policy
-- **buildEngine()**: Helper to create test engines with pre-populated messages
-
-Example from `ch08/context/policy_test.go`:
-```go
-func TestOffloadPolicyApply_OffloadsLongToolMessagesOnly(t *testing.T) {
-    st := &fakeStorage{store: map[string]string{}}
-    p := NewOffloadPolicy(st, 0.8, 1, 10)
-    engine := buildEngine([]shared.OpenAIMessage{...})
-    result, err := p.Apply(context.Background(), engine)
-    // assertions...
-}
-```
-
-## Shared Utilities
-
-The `shared/` package contains common code used across chapters:
-
-- `client.go`: `NewLLMClient()` creates openai-go client with custom headers
-- `config.go`: ModelConfig, AppConfig, environment variable loading
-- `env.go`: `GetHomeDir()`, `GetWorkspaceDir()`, `GetProjectName()`
-- `mcp.go`: MCP server configuration loading and placeholder replacement
-- `type.go`: Common type aliases (e.g., `OpenAIMessage`)
-
-## Chapter-Specific Notes
-
-**Chapter 7 (RAG)**:
-- Requires PostgreSQL with pgvector extension
-- Uses GORM for database operations
-- Implements semantic search via `SemanticSearchTool`
-- Supports line-based and paragraph-based chunking
-
-**Chapter 8 (Guardrails)**:
-- Tool confirmation UI: Allow/Reject/Always Allow options with ↑↓ navigation
-- ESC cancellation: Preserves conversation context, skips summary/memory
-- `CommitTurn(skipPoliciesAndMemory bool)`: Controls whether to run policies/memory on commit
-- `findTool(toolName)`: Unified tool lookup across native and MCP tools
-
-**Chapter 9 (Skills System)**:
-- Skills are descriptive prompts that guide models on how to use tools in specific scenarios
-- Progressive loading: Only skill metadata (name + description) injected into system prompt at startup
-- Full skill content loaded on-demand via `load_skill` tool
-- Skill files in `.babyagent/skills/<skill-id>/SKILL.md` with YAML front matter
-- Skill manager automatically discovers and loads skills from workspace
-
-**System Prompt Placeholders** (ch08/prompt.go, ch09/prompt.go):
-- `{runtime}`: OS (darwin/linux/windows)
-- `{workspace_path}`: Current working directory
-- `{memory}`: Injected global + workspace memory
-- `{skills}`: List of available skills (name + description) - ch09 only
-
-## Development Workflow
-
-When modifying agent behavior:
-1. Changes to `Agent.RunStreaming()` affect the core loop
-2. Changes to policies affect how context is managed after each turn
-3. Changes to system prompt affect how the agent behaves
-4. TUI changes go in `ch08/tui/` or `ch09/tui/`, MessageVO types in `vo.go`
-5. Skills are managed in `.babyagent/skills/` directory (ch09)
-
-When adding new tools:
-1. Implement `Tool` interface: `ToolName()`, `Info()`, `Execute()`
-2. Register in `ch08/main/main.go` or `ch09/main/main.go` tool list
-3. Tool will automatically be included in LLM requests
-
-When adding skills (ch09):
-1. Create skill directory: `.babyagent/skills/<skill-id>/`
-2. Create `SKILL.md` with YAML front matter (name, description)
-3. Skill will be auto-discovered and metadata injected into system prompt
-4. LLM can call `load_skill(name="<skill-id>")` to load full content
-
-When configuring tool confirmation:
-1. Create `ToolConfirmConfig` with `RequireConfirmTools` map in `ch08/main/main.go` or `ch09/main/main.go`
-2. Map tool names (e.g., `tool.AgentToolBash`) to `true` for tools requiring confirmation
-3. For MCP tools, use full tool name (e.g., `babyagent_mcp__filesystem__write_file`)
-4. `alwaysAllowTools` is managed automatically by Agent during session
-
-When debugging issues:
-- Set `log.SetOutput(os.Stdout)` in main/main.go to see logs
-- Check policy execution via TUI events
-- Verify token counts with `CountTokens()` from context/share.go
-- For confirmation flow: check `MessageTypeToolConfirm` in TUI event handling
-- For skills (ch09): Check `.babyagent/skills/` directory and verify skill metadata is loaded
+`frontend/` is the assistant-ui client for ch10/ch11. `src/api.ts` uses native `fetch` + `ReadableStream` for SSE; do not switch back to a reconnecting EventSource, which would duplicate POSTs and messages. See `frontend/README.md`.

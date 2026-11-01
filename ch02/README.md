@@ -1,5 +1,7 @@
 # 第二章：赋予 AI “手脚”（Tool Calling 和 Agent）
 
+> **前置**：ch01｜**本章新增**：Tool Calling、最小 Agent Loop、本地工具｜**下一章**：ch03
+
 欢迎来到第二章！本章我们把 LLM 从“只会聊天”升级为“能动手做事”的小型 Agent：它不仅能回答问题，还能**读取/修改本地文件、写入新文件、执行命令**。
 
 你将看到一个最小可用的 Agent 循环：LLM 先规划行动 -> 触发工具 -> 把工具结果喂回 LLM -> 直到产出最终答案。这就是后续复杂 Agent 的雏形。
@@ -106,7 +108,7 @@ type Tool interface {
 - `ch02/main/main.go`：程序入口，创建 Agent，注册工具
 - `ch02/agent.go`：最小 Agent 循环（function calling 驱动）
 - `ch02/tool/*.go`：本地工具实现
-- `ch02/config.go`：读取模型配置
+- `shared/config.go`：模型配置（ch02 通过 `shared.NewModelConfig()` 读取）
 - `ch02/prompt.go`：系统提示词
 
 ---

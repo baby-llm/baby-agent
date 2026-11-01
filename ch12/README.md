@@ -1,5 +1,11 @@
 # 第十二章：Agent 评测与自动化测试（LLM Eval）
 
+> **前置**：ch11（概念）｜**本章新增**：Mock LLM、版本化数据集、并发评测 runner、JSON/Markdown 报告｜**下一章**：无
+
+> **近期社区动态（2026-05 → 2026-11）**：见 [docs/COMMUNITY-2026.md](../docs/COMMUNITY-2026.md)（本章对应小节）。
+
+> **实现状态**：本章代码已实现 Mock LLM、版本化数据集、并发 runner 与 JSON/Markdown 报告；LLM-as-a-Judge、线上采样评测等属于扩展方向，未实现。
+
 前面的章节让 Agent 能调用工具、管理上下文、持久化会话，也能记录执行轨迹。但「看起来能用」并不是质量保证：修改 prompt、模型或工具后，可能悄悄让原本正常的能力退化。
 
 本章给 Agent 加上一条可重复执行的质量门禁：把任务写成数据集，用确定性的 Mock LLM 执行 Agent Loop，并生成可供 CI 比较的评测报告。

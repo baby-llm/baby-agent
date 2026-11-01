@@ -1,5 +1,9 @@
 # 第四章：让 Agent 接入 MCP 生态
 
+> **前置**：ch03｜**本章新增**：MCP 客户端、工具命名空间、本地工具与 MCP 工具共存｜**下一章**：ch05
+
+> **近期社区动态（2026-05 → 2026-11）**：见 [docs/COMMUNITY-2026.md](../docs/COMMUNITY-2026.md)（本章对应小节）。
+
 欢迎来到第四章！在第三章的基础上，本章继续完善一个接入 MCP 生态的 Agent：
 
 - **接入 MCP（Model Context Protocol）工具生态**

@@ -1,5 +1,7 @@
 # 第三章：让 Agent “更能看见”（Reasoning 展示、TUI）
 
+> **前置**：ch02｜**本章新增**：reasoning 字段展示、Bubble Tea TUI、ESC 取消｜**下一章**：ch04
+
 欢迎来到第三章！在第二章的基础上，本章继续完善一个更“可观察”的 Agent：
 
 - **可视化展示推理与工具调用过程**（便于调试）
@@ -34,7 +36,9 @@ OPENAI_BASE_URL=http://localhost:11434/v1
 OPENAI_MODEL=qwen3:8b
 ```
 
-此外，本章默认在 `mcp-server.json` 中配置了一个 MCP 文件系统服务器（基于 `@modelcontextprotocol/server-filesystem`）。这需要本地能够运行 `npx`（通常意味着安装 Node.js）。
+此外，第四章会在 `mcp-server.json` 中配置一个 MCP 文件系统服务器（基于 `@modelcontextprotocol/server-filesystem`），需要本地能够运行 `npx`（通常意味着安装 Node.js）。
+
+> **实现状态**：MCP 接入从第四章开始。本章代码只有 bash 工具，没有 MCP 客户端；这里保留 MCP 的配置说明，是为了让读者先理解后续章节的运行环境。
 
 ---
 
@@ -189,7 +193,7 @@ if chunk.Content != nil {
 
 ## 💻 代码结构速览
 
-- `ch03/agent.go`：增强后的 Agent Loop（流式 + 多种 reasoning 字段解析 + MCP 支持）
+- `ch03/agent.go`：增强后的 Agent Loop（流式 + 多种 reasoning 字段解析 + MCP 支持见第四章）
 - `ch03/tui/tui.go`：Bubble Tea TUI 可视化界面
 
 ---

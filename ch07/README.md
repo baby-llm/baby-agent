@@ -1,5 +1,11 @@
 # 第七章：Agentic RAG（检索增强生成）
 
+> **前置**：ch06（概念）｜**本章新增**：切分、Embedding、pgvector、Rerank、语义搜索 CLI｜**下一章**：ch08（ch07 为可选分支）
+
+> **近期社区动态（2026-05 → 2026-11）**：见 [docs/COMMUNITY-2026.md](../docs/COMMUNITY-2026.md)（本章对应小节）。
+
+> **实现状态**：Line/Paragraph 切分、HTTP Embedding/Rerank、pgvector 存储、增量索引与 Semantic Search CLI 已实现；AST 切分、全文搜索、混合搜索是扩展设计。
+
 欢迎来到第七章！在前面章节的基础上，本章介绍 Agent 开发中最重要的能力之一：**Agentic RAG**（Agentic Retrieval-Augmented Generation）。
 
 与传统的"手动配置检索"不同，**Agentic RAG 的核心在于让 Agent 自主决定**：

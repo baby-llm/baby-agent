@@ -1,5 +1,9 @@
 # 第十章：Web 服务化与 SSE 流式传输
 
+> **前置**：ch09（概念）｜**本章新增**：HTTP/SSE 服务、SQLite 持久化、树形历史、assistant-ui 前端｜**刻意简化**：去掉 TUI / context / memory / RAG / skills｜**下一章**：ch11
+
+> **近期社区动态（2026-05 → 2026-11）**：见 [docs/COMMUNITY-2026.md](../docs/COMMUNITY-2026.md)（本章对应小节）。
+
 欢迎来到第十章！在前面的章节中，我们构建的 Agent 都运行在终端里——用户在 TUI 里输入，Agent 在本地执行。
 
 本章的核心任务是**服务化**：把 Agent 的核心逻辑从 TUI 中剥离出来，封装成 HTTP 服务，让浏览器也能像 ChatGPT 一样与 Agent 流式对话。
@@ -240,7 +244,7 @@ pnpm install
 pnpm dev   # 开发模式，自动代理 /api 到 localhost:8080
 ```
 
-前端通过 `@microsoft/fetch-event-source` 消费 SSE 流，代理配置在 `vite.config.ts` 中：
+前端通过原生 `fetch` + `ReadableStream` 消费 SSE（避免 EventSource 自动重连导致重复 POST），代理配置在 `vite.config.js` 中：
 
 ```ts
 server: {
@@ -258,6 +262,10 @@ server: {
 | `GET` | `/api/conversation?user_id=` | 列出会话 |
 | `POST` | `/api/conversation/:id/message` | 发送消息（SSE 流式响应） |
 | `GET` | `/api/conversation/:id/message` | 查询消息历史 |
+| `PATCH` | `/api/conversation/:id` | 重命名会话 |
+| `DELETE` | `/api/conversation/:id` | 删除会话 |
+
+> ch11 在同一套 HTTP/SSE 结构上增加了 `/metrics` 与 `/api/trace/:id`，并默认同样监听 `:8080`。
 
 ---
 

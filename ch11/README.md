@@ -1,5 +1,9 @@
 # 第十一章：Agent 可观测性（Observability）
 
+> **前置**：ch10｜**本章新增**：OpenTelemetry span、Prometheus 指标、AgentTrace 持久化与查询｜**下一章**：ch12
+
+> **近期社区动态（2026-05 → 2026-11）**：见 [docs/COMMUNITY-2026.md](../docs/COMMUNITY-2026.md)（本章对应小节）。
+
 > **实现状态**：本章代码已实现 OpenTelemetry span、Prometheus 指标、AgentTrace 持久化与查询接口；Jaeger/Tempo/Grafana 的部署方式与 180 天保留策略属于运维建议，不在代码中实现。
 
 欢迎来到第十一章！在第十章中，我们把 Agent 服务化，让它能够通过 HTTP 接口接受请求、流式返回结果。
@@ -48,7 +52,7 @@ curl localhost:8080/api/trace/<trace_id>
 
 - 可选：`export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` 将 span 导出到 Jaeger/Tempo；不设置时仍会记录本地 `AgentTrace` 表与 Prometheus 指标。
 - ch10 与 ch11 默认都监听 `:8080`，二选一运行，或修改 `ch11/main/main.go` 的监听地址。
-- 前端复用 ch10 的 `frontend/`，Vite 代理仍指向 `localhost:8080`；ch11 增加了 trace 查询接口与展示字段。
+- 前端复用 ch10 的 `frontend/`，Vite 代理仍指向 `localhost:8080`；ch11 增加了 trace 查询接口，但当前 UI 尚未展示 trace 面板（可作为扩展练习）。
 
 ---
 

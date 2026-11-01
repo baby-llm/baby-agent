@@ -1,6 +1,10 @@
 # 第九章：Agent 技能插件（Skills）
 
-欢迎来到第九章！在前面的章节中，我们已经构建了一个功能完善的 AI Agent，具备了工具调用、上下文管理、记忆系统、RAG 能力和安全防护机制。
+> **前置**：ch08｜**本章新增**：Skills、渐进式加载、`load_skill`｜**下一章**：ch10
+
+> **近期社区动态（2026-05 → 2026-11）**：见 [docs/COMMUNITY-2026.md](../docs/COMMUNITY-2026.md)（本章对应小节）。
+
+欢迎来到第九章！在前面的章节中，我们已经构建了一个功能完善的 AI Agent，具备了工具调用、上下文管理、记忆系统、RAG 能力和安全防护机制。**本章代码基于 ch08 的 guardrails；RAG 在 ch07 中实现，尚未集成进本章的 Agent。**
 
 本章介绍 Agent 技能插件（Skills）——**本质上是一段描述性文字，指导模型在不同场景下如何使用工具**。
 
@@ -80,14 +84,18 @@
 - 自动发现并包含 `scripts/` 和 `references/` 目录中的相关文件
 - 技能指导注入到对话中，引导 LLM 执行
 
+> **实现状态**：`load_skill` 的 `id` 来自模型参数，本章代码已拒绝 `..`、路径分隔符和绝对路径，并校验 `name` 与目录名一致；生产环境仍建议配合文件系统权限边界。
+
 ### 2. 技能文件格式
+
+> **规范提醒**：agentskills.io 要求 `name` 只包含小写字母、数字和连字符，且必须与父目录名一致（见 Issue #23）。下面的示例使用 `code-review`；本章 loader 已按该规则校验 `name` 与目录名。
 
 技能使用标准的 Markdown + YAML front matter 格式：
 
 ```
 .babyagent/skills/<skill-id>/SKILL.md
 ---
-name: Code Review
+name: code-review
 description: Review code for bugs, style issues, and best practices
 ---
 
@@ -107,7 +115,7 @@ description: Review code for bugs, style issues, and best practices
 ```
 
 **Front Matter 字段**：
-- `name`：技能显示名称（用于 system prompt）
+- `name`：技能标识（需与目录名一致；用于 system prompt 与 `load_skill`）
 - `description`：技能描述（帮助 LLM 理解何时使用）
 
 **正文内容**：详细的步骤、检查清单、最佳实践等
@@ -244,7 +252,7 @@ mkdir -p .babyagent/skills/code-review/{scripts,references}
 # 创建技能文件
 cat > .babyagent/skills/code-review/SKILL.md << 'EOF'
 ---
-name: Code Review
+name: code-review
 description: Review code for bugs, style issues, and best practices
 ---
 
@@ -372,7 +380,8 @@ You can read the script/reference files above when you need their full content.
 ### Front Matter 格式
 ```yaml
 ---
-name: 显示名称
+# name 必须与父目录名一致，只能包含小写字母、数字和连字符
+name: code-review
 description: 技能描述，帮助 LLM 理解使用场景
 ---
 ```

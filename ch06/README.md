@@ -1,5 +1,9 @@
 # 第六章：记忆机制（Memory System）
 
+> **前置**：ch05｜**本章新增**：两层记忆（Global / Workspace）、LLM 驱动的记忆更新与持久化｜**下一章**：ch07（可选）→ ch08
+
+> **近期社区动态（2026-05 → 2026-11）**：见 [docs/COMMUNITY-2026.md](../docs/COMMUNITY-2026.md)（本章对应小节）。
+
 欢迎来到第六章！在第五章的基础上，本章介绍 Agent 开发中另一个重要概念：**记忆系统**（Memory System）。
 
 上下文工程解决了"如何在有限窗口内高效运行"的问题，但 Agent 仍然缺乏长期记忆能力。每当会话重启，Agent 就会"遗忘"之前的所有对话。本章实现一套完整的记忆机制，让 Agent 能够跨会话保持上下文连贯性。
@@ -145,14 +149,16 @@ type MemoryUpdater interface {
 **更新流程**：
 1. 将当前记忆和新一轮对话消息组合成 Prompt
 2. 调用 LLM 分析并生成更新后的记忆
-3. 解析 LLM 返回的 JSON，更新三层记忆
+3. 解析 LLM 返回的 XML 标签，更新两层记忆（Global / Workspace）
 4. 将 Global/Workspace 记忆持久化到文件系统
 
 **Prompt 设计要点**：
-- 明确三层记忆的定义和作用域
+- 明确两层记忆的定义和作用域
 - 指导 LLM 使用 Markdown 格式
 - 强调简洁性和信息保留
 - 提供示例帮助 LLM 理解期望输出
+
+> **实现状态**：本章代码实现两层记忆（Global + Workspace），并使用 XML 标签解析 LLM 输出。文档中早期的“三层记忆 / JSON”保留作为扩展思路；要增加第三层，需要在 `ch06/memory` 中扩展存储与 prompt。
 
 相关代码：`ch06/memory/update.go`
 

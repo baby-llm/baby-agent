@@ -1,6 +1,10 @@
 # 第八章：沙盒与安全防御（Guardrails）
 
-欢迎来到第八章！在前面的章节中，我们已经构建了一个功能完善的 AI Agent，具备了工具调用、上下文管理、记忆系统和 RAG 能力。
+> **前置**：ch06（代码基线；RAG 未集成）｜**本章新增**：Docker 沙盒、人工确认、ESC 取消｜**下一章**：ch09
+
+> **近期社区动态（2026-05 → 2026-11）**：见 [docs/COMMUNITY-2026.md](../docs/COMMUNITY-2026.md)（本章对应小节）。
+
+欢迎来到第八章！在前面的章节中，我们已经构建了一个功能完善的 AI Agent，具备了工具调用、上下文管理、记忆系统和 RAG 能力。**本章代码基于 ch06 的上下文/记忆能力；RAG 在 ch07 中实现，尚未集成进本章的 Agent。**
 
 然而，**当 Agent 能够执行命令、读写文件时，安全性就变得至关重要**。本章介绍如何为 Agent 设计安全防护机制，包括 Docker 沙盒隔离和人工确认机制。
 
@@ -224,6 +228,8 @@ Agent: 准备调用 bash
 - `tool.AgentToolEdit`：编辑文件需要确认
 - `tool.AgentToolRead`：读取文件通常不需要确认
 
+> **实现状态**：当前入口是 `ch08/main/main.go`，只注册 `bash` 与 `load_storage`；`write` / `edit` / `read` 的确认配置是扩展设计，尚未接入。下面保留这段说明，方便你按同样方式扩展。
+
 ### MCP 工具确认
 
 MCP 工具使用完整工具名（如 `babyagent_mcp__filesystem__write_file`）作为 key 进行配置。
@@ -242,7 +248,7 @@ MCP 工具使用完整工具名（如 `babyagent_mcp__filesystem__write_file`）
 1. **Docker 要求**：使用 Docker 沙盒需要本地安装并启动 Docker
 2. **容器持久化**：容器使用 `unless-stopped` 重启策略，重启后自动运行
 3. **确认状态与会话绑定**：`alwaysAllowTools` 在 `ResetSession()` 后清空
-4. **ConfirmReject 终止 Loop**：拒绝工具调用会返回错误，退出循环
+4. **ConfirmReject 的语义**：拒绝会把 "user rejected tool call" 回填给模型并继续 loop；只有 ESC 会取消本轮。旧描述“拒绝即终止”与当前代码不一致。
 
 ---
 
