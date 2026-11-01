@@ -16,7 +16,7 @@
 
 ---
 
-## 🎯 你将学到什么
+## 🎯 本章目标
 
 1. **技能抽象**：将常见任务模式抽象为可复用的技能描述
 2. **技能路由**：LLM 自动识别任务类型并选择合适的技能
@@ -25,7 +25,38 @@
 
 ---
 
-## 🛠 核心功能
+## 🛠 准备工作
+
+需要 Go 1.25+ 和根目录 `config.json`：
+
+```bash
+cp config.example.json config.json
+# 填入 llm_providers.front_model / back_model 的 api_key
+```
+
+`mcp-server.json` 可选。技能放在 `<workspace>/.babyagent/skills/<skill-id>/SKILL.md`；仓库默认不带技能目录，第一次运行看到 `No skills available.` 是正常的。
+
+---
+
+## 📌 相对上一章的变化
+
+在 ch08 的沙盒/HITL Agent 上新增 `skill` 包、`load_skill` 工具、技能元数据注入 system prompt，以及技能文件校验。工具集恢复 `read`；`bash` 仍然优先走 Docker，失败时降级到宿主机。
+
+---
+
+### 与 ch08 的复制差异
+
+| 文件 | 差异 |
+|---|---|
+| `context/engine.go` | 增加 `SkillManager` 注入，system prompt 注入 `{skills}` |
+| `skill/` / `tool/load_skill.go` | 本章新增 |
+| `tool/read.go` | 从 ch02 复制，供技能示例使用 |
+| `agent.go` / `main` / `tui/` | 接入技能元数据与 `load_skill` |
+| `memory/` / `storage/` / `tool/docker_bash.go` | 与 ch08 保持同步 |
+
+---
+
+## 📖 核心原理解析
 
 ### 1. 技能插件设计
 
@@ -199,7 +230,7 @@ You can read the script/reference files above when you need their full content.
 
 ---
 
-## 📖 代码结构速览
+## 💻 代码结构速览
 
 ### Skill 包 (`ch09/skill/`)
 
@@ -241,7 +272,7 @@ You can read the script/reference files above when you need their full content.
 
 ---
 
-## 💡 使用示例
+## 🚀 动手运行
 
 ### 创建技能
 
@@ -419,6 +450,21 @@ description: 技能描述，帮助 LLM 理解使用场景
 
 ---
 
-## 📚 相关资源
+## 🚫 故意不实现
+
+- 不做技能市场、远程下载或版本管理。
+- 不做技能级权限隔离；技能内容会进入 system prompt。
+- RAG 未集成进本章 Agent。
+- `SkillManager` 只扫描本地 `.babyagent/skills/`。
+
+---
+
+## ➡️ 下一章
+
+ch10 去掉 TUI / skills / context / memory，把核心 Agent 改造成 HTTP + SSE 服务。
+
+---
+
+## 📚 扩展阅读与参考资料
 
 - [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview)

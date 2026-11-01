@@ -10,14 +10,31 @@
 
 本章给 Agent 加上一条可重复执行的质量门禁：把任务写成数据集，用确定性的 Mock LLM 执行 Agent Loop，并生成可供 CI 比较的评测报告。
 
-## 本章目标
+## 🎯 本章目标
 
 - 用小接口隔离 LLM SDK，使 Agent 调度逻辑可在不联网、不花 token 的情况下测试。
 - 用 `MockClient` 精确编排「模型回复 → 工具调用 → 模型最终回答」。
 - 用版本化数据集定义输入、期望输出、期望工具序列与最大 loop 深度。
 - 生成通过率、失败原因、耗时与 token 用量的结构化报告。
 
-## 结构
+## 🛠 准备工作
+
+无需 API Key，也无需 `config.json`。只需要 Go 1.25+：
+
+```bash
+go test -v ./ch12/...
+go run ./ch12/main
+```
+
+---
+
+## 📌 相对上一章的变化
+
+本章是独立的评测章节：不启动 HTTP 服务，也不复用 ch11 的 trace；它用一套更小的 `Client` / `Tool` 接口重写 Agent Loop，以便注入 `MockClient`。ch10/ch11 的 Agent 关注流式服务，ch12 关注“调度逻辑是否可重复验证”，两者故意不共享代码。
+
+---
+
+## 💻 代码结构速览
 
 ```text
 ch12/
@@ -51,7 +68,7 @@ Runner 对答案、工具序列、loop 深度评分
 
 `MockClient` 会按队列顺序返回 Completion，并保存每一次请求消息。因此测试不仅能断言最终答案，还能验证工具结果确实被回填到了下一轮上下文。
 
-## 快速运行
+## 🚀 动手运行
 
 在仓库根目录执行：
 
@@ -64,8 +81,8 @@ go run ./ch12/main
 
 # 同时写出机器可读与可读报告
 go run ./ch12/main \
-  -output /tmp/ch12-report.json \
-  -markdown /tmp/ch12-report.md
+  -output ch12-report.json \
+  -markdown ch12-report.md
 ```
 
 示例成功时会输出：
@@ -123,7 +140,7 @@ go run ./ch12/main \
 }
 ```
 
-示例入口使用 `MockTool`，所以它不会读取或修改真实文件。接入真实 Agent 时，只需把 `eval.Run` 的 executor 换成实际模型客户端和真实工具；断言、报告与 CI 逻辑无需改变。
+示例入口使用 `MockTool`，所以它不会读取或修改真实文件。接入真实 Agent 时，需要把 `eval.Run` 的 executor 换成实际模型客户端与真实工具；ch10/ch11 的流式 Agent 与本章的 `Client` 接口并不相同，通常要写一层适配，而不是只替换一个函数。断言、报告与 CI 逻辑可以保持不变。
 
 ## 评测指标与边界
 
@@ -138,4 +155,27 @@ go run ./ch12/main \
 
 ## 与第十一章的关系
 
-第 11 章回答线上请求发生了什么；第 12 章回答一次改动是否让 Agent 变好或变坏。可将第 11 章的慢请求、工具失败或异常 loop 轨迹匿名化后沉淀为本章数据集，再用评测防止同类问题回归。
+第 11 章回答线上请求发生了什么；第 12 章回答一次改动是否让 Agent 变好或变坏。可将第 11 章的慢请求、工具失败或异常 loop 轨迹匿名化后沉淀为本章数据集，再用评测防止同类问题回归。当前代码尚未自动读取 trace，这一步是扩展方向。
+
+---
+
+## 🚫 故意不实现
+
+- 不评测真实模型的延迟、成本与主观质量。
+- 不做轨迹回放或自动从线上采样。
+- 数据集只覆盖单轮 tool loop，不覆盖流式输出、取消与并发会话。
+- 报告包含时间戳与耗时，不适合做字节级 diff；CI 应比较通过率与失败原因。
+
+---
+
+## ➡️ 下一章
+
+课程到这里结束。接下来可以回到任一章节做扩展，例如把 ch07 的 `semantic_search` 接入 ch09 的 Agent，或为 ch11 的前端补一个 trace 面板。
+
+---
+
+## 📚 扩展阅读与参考资料
+
+- [OpenAI Evals](https://github.com/openai/evals)
+- [Go testing package](https://pkg.go.dev/testing)
+- [Thoughtworks: LLM evaluation](https://www.thoughtworks.com/insights/blog/generative-ai/llm-evaluation)

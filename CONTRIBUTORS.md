@@ -6,7 +6,7 @@
 
 | 贡献者 | 贡献 |
 |---|---|
-| [@0xmark667](https://github.com/0xmark667) | ch10 前端迁移到 assistant-ui（PR #12）；ch12 显式规划方案（PR #15，待 rebase 到最新 main） |
+| [@0xmark667](https://github.com/0xmark667) | ch10 前端迁移到 assistant-ui（PR #12）；ch12 显式规划方案（PR #15；已随 PR #24 落地） |
 | [@IcedSakana](https://github.com/IcedSakana) | ch06 TUI 记忆更新完成态显示（PR #19） |
 | [@809345127](https://github.com/809345127) | TUI 流式终结竞态修复（PR #14）、reasoning 字段支持（PR #10）、stream 关闭释放连接（PR #22） |
 | [@fff-rick](https://github.com/fff-rick) | ch11 可观测性与 ch12 评测的核心实现（PR #24） |

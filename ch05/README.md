@@ -10,7 +10,7 @@
 
 ---
 
-## 🎯 你将学到什么
+## 🎯 本章目标
 
 1. **上下文管理机制**：理解为什么需要上下文工程，以及常见压缩手段。
 2. **截断策略（Truncate）**：如何安全删除旧消息并保留对话连续性。
@@ -69,6 +69,12 @@ cp config.example.json config.json
   }
 }
 ```
+
+---
+
+## 📌 相对上一章的变化
+
+在 ch04 的 Agent 上加入 `context.Engine`：每轮提交时统计 token，并按阈值运行截断、卸载、摘要三种策略；TUI 新增策略执行事件。本章只处理“当前会话的上下文”，还没有跨会话记忆。
 
 ---
 
@@ -209,11 +215,11 @@ type Summarizer interface {
 **实现方式**：
 - 使用 `tiktoken-go`（`cl100k_base`）
 - 对消息正文做 token 计数
-- 每轮提交和策略执行后重算上下文 token
+- 每轮提交时重算；策略执行后采用策略返回的计数
 
 **注意**：属于近似估算，和实际 API 计费可能有细微差异。
 
-相关代码：`ch05/context/share.go`
+相关代码：`ch05/context/tokens.go`
 
 ---
 
@@ -226,7 +232,7 @@ type Summarizer interface {
 - `ch05/context/policy_offload.go`：卸载策略
 - `ch05/context/policy_summary.go`：摘要策略
 - `ch05/context/summary.go`：`Summarizer` 接口与 `LLMSummarizer`
-- `ch05/context/share.go`：token 计数与角色识别工具
+- `ch05/context/tokens.go`：token 计数与角色识别工具
 
 ### 其他核心模块
 - `ch05/storage/storage.go`：存储接口（卸载策略依赖）
@@ -273,6 +279,20 @@ go run ./ch05/main
 3. **存储建议持久化**：生产环境建议用 Redis/数据库替代内存存储
 4. **阈值需按模型调参**：不同模型上下文窗口不同，触发阈值需要按实际容量设置
 5. **策略必须先评测再上线**：任何策略都要先通过可复现实验（离线评测或线上对照）证明有效，不能仅凭人工判断把它当作“优化”直接上线
+
+---
+
+## 🚫 故意不实现
+
+- 不做跨会话记忆（ch06）。
+- 不做 RAG（ch07，可选分支）。
+- 策略阈值、批大小、保留条数是示例值，需要按模型窗口和成本调整。
+
+---
+
+## ➡️ 下一章
+
+ch06 在上下文引擎上加入 Global / Workspace 两层记忆。
 
 ---
 

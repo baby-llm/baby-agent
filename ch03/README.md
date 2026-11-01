@@ -7,11 +7,11 @@
 - **可视化展示推理与工具调用过程**（便于调试）
 - **兼容推理模型的 `reasoning_content` / `reasoning` / `thinking` 字段**
 
-本章依旧保留最小 Agent Loop 的结构，但在“输出可观察性”和“工具生态扩展性”上向前迈了一步。
+本章依旧保留最小 Agent Loop 的结构，重点补上“流式输出的可观察性”：推理过程、工具调用和最终回答都能在 TUI 中看到。
 
 ---
 
-## 🎯 你将学到什么
+## 🎯 本章目标
 
 1. **推理字段兼容处理**：如何从流式响应中解析 `reasoning_content`、`reasoning`、`thinking`（以及不同厂商字段差异的处理思路）。
 2. **TUI 可视化层**：用 Bubble Tea 实现一个轻量的可视化输出（这不是本课重点，仅为后续调试服务）。
@@ -39,6 +39,12 @@ OPENAI_MODEL=qwen3:8b
 此外，第四章会在 `mcp-server.json` 中配置一个 MCP 文件系统服务器（基于 `@modelcontextprotocol/server-filesystem`），需要本地能够运行 `npx`（通常意味着安装 Node.js）。
 
 > **实现状态**：MCP 接入从第四章开始。本章代码只有 bash 工具，没有 MCP 客户端；这里保留 MCP 的配置说明，是为了让读者先理解后续章节的运行环境。
+
+---
+
+## 📌 相对上一章的变化
+
+在 ch02 的 Agent Loop 上改为流式请求：新增 `reasoning_content` / `reasoning` / `thinking` 展示、Bubble Tea TUI、ESC 取消。为了把注意力放在流式与展示上，本章只保留 `bash`；`read` / `write` / `edit` 暂时移除，ch04 会通过 MCP 重新提供。
 
 ---
 
@@ -213,7 +219,21 @@ go run ./ch03/main
 - “请读取 README.md 并总结项目目标”
 - “列出当前目录下的文件”
 
-如果服务正常启动，你会看到工具调用日志出现在 TUI 中。
+如果程序正常启动，你会看到工具调用日志出现在 TUI 中。
+
+---
+
+## 🚫 故意不实现
+
+- 不做 MCP 工具发现与命名空间（ch04）。
+- 不做上下文压缩（ch05）。
+- TUI 只做当前进程的展示，不持久化会话（ch10）。
+
+---
+
+## ➡️ 下一章
+
+ch04 接入 MCP，把本地工具与 MCP 工具统一到同一个 `Tool` 接口。
 
 ---
 
