@@ -69,22 +69,33 @@ func (u *LLMMemoryUpdater) Update(ctx context.Context, oldMemory MemoryContent, 
 	}
 
 	respContent := resp.Choices[0].Message.Content
-	newMemory := MemoryContent{}
-	newMemory.GlobalMemory = extractXMLTag(respContent, "global")
-	newMemory.WorkspaceMemory = extractXMLTag(respContent, "workspace")
-
-	return newMemory, nil
+	return mergeMemory(oldMemory, respContent), nil
 }
 
-// extractXMLTag 使用正则表达式从文本中提取 XML 标签的内容
-func extractXMLTag(content, tagName string) string {
+// mergeMemory 只更新 LLM 实际返回的层级。模型漏掉某个标签或返回了
+// 不符合格式的内容时，保留旧值，避免一次解析失败把整层记忆清空。
+// 显式返回空标签（如 <global></global>）表示清空该层。
+func mergeMemory(oldMemory MemoryContent, content string) MemoryContent {
+	merged := oldMemory
+	if value, ok := extractXMLTag(content, "global"); ok {
+		merged.GlobalMemory = value
+	}
+	if value, ok := extractXMLTag(content, "workspace"); ok {
+		merged.WorkspaceMemory = value
+	}
+	return merged
+}
+
+// extractXMLTag 使用正则表达式从文本中提取 XML 标签的内容。
+// 第二个返回值表示标签是否存在，用于区分“没有返回”和“显式清空”。
+func extractXMLTag(content, tagName string) (string, bool) {
 	// 匹配 <tagName>...</tagName>，支持多行内容
 	pattern := regexp.MustCompile(`<` + regexp.QuoteMeta(tagName) + `>([\s\S]*?)</` + regexp.QuoteMeta(tagName) + `>`)
 	matches := pattern.FindStringSubmatch(content)
 	if len(matches) < 2 {
-		return ""
+		return "", false
 	}
-	return strings.TrimSpace(matches[1])
+	return strings.TrimSpace(matches[1]), true
 }
 
 const updateMemoryPrompt = `You are a memory management system for an AI coding assistant. Your task is to analyze conversation messages and update two levels of memory.

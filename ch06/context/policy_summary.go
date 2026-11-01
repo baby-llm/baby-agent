@@ -3,11 +3,16 @@ package context
 import (
 	"context"
 	"log"
+	"strings"
 
 	"github.com/openai/openai-go/v3"
 
 	"babyagent/shared"
 )
+
+// summaryMessagePrefix marks the synthetic summary message so the truncate
+// policy can preserve it instead of removing it with older history.
+const summaryMessagePrefix = "[Conversation summary so far]\n"
 
 type SummaryPolicy struct {
 	// KeepRecentMessages 表示跳过最后 N 条消息，避免摘要最新对话。
@@ -46,6 +51,19 @@ func (p *SummaryPolicy) Apply(ctx context.Context, engine *Engine) (PolicyResult
 	}
 
 	summarizeUntilIndex := len(engine.messages) - p.KeepRecentMessages
+	// Never let the kept tail start with a tool result: the matching
+	// assistant(tool_calls) message would be summarized away, producing an
+	// invalid request. Move the boundary back to the assistant tool-call message.
+	for summarizeUntilIndex > 0 && engine.messages[summarizeUntilIndex].Message.OfTool != nil {
+		summarizeUntilIndex--
+	}
+	if summarizeUntilIndex <= 0 {
+		return PolicyResult{
+			Messages:      engine.messages,
+			ContextTokens: engine.contextTokens,
+		}, nil
+	}
+
 	inputTokenLimit := p.Summarizer.GetSummaryInputTokenLimit()
 
 	accumulatedSummary := ""
@@ -104,7 +122,7 @@ func (p *SummaryPolicy) Apply(ctx context.Context, engine *Engine) (PolicyResult
 	// 构建新的消息列表
 	messages := make([]messageWrap, 0, len(engine.messages))
 
-	summaryMessage := openai.UserMessage(accumulatedSummary)
+	summaryMessage := openai.UserMessage(summaryMessagePrefix + accumulatedSummary)
 	newTokens := CountTokens(summaryMessage)
 
 	messages = append(messages, messageWrap{Message: summaryMessage, Tokens: newTokens})
@@ -115,4 +133,11 @@ func (p *SummaryPolicy) Apply(ctx context.Context, engine *Engine) (PolicyResult
 		Messages:      messages,
 		ContextTokens: engine.contextTokens - removedTokens + newTokens,
 	}, nil
+}
+
+// isSummaryMessage reports whether a message is the synthetic summary inserted
+// by SummaryPolicy.
+func isSummaryMessage(message shared.OpenAIMessage) bool {
+	content, ok := message.GetContent().AsAny().(*string)
+	return ok && strings.HasPrefix(*content, summaryMessagePrefix)
 }

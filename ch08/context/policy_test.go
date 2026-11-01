@@ -169,8 +169,8 @@ func TestSummaryPolicyApply_GeneratesBatchedSummary(t *testing.T) {
 	if result.Messages[0].Message.OfUser == nil {
 		t.Fatalf("summary message should be user role")
 	}
-	if got := contentString(t, result.Messages[0].Message); got != "[2][1]" {
-		t.Fatalf("unexpected summary content: got %q want %q", got, "[2][1]")
+	if got := contentString(t, result.Messages[0].Message); !strings.HasPrefix(got, summaryMessagePrefix) || !strings.Contains(got, "[2][1]") {
+		t.Fatalf("unexpected summary content: got %q", got)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -13,6 +14,11 @@ import (
 
 	"babyagent/shared"
 )
+
+// skillIDPattern follows the agentskills.io name rules: lowercase alphanumeric
+// segments separated by single hyphens. It also makes path traversal impossible
+// because dots and path separators are rejected.
+var skillIDPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 // frontMatter represents the YAML front matter structure
 type frontMatter struct {
@@ -22,6 +28,10 @@ type frontMatter struct {
 
 // LoadSkill loads a skill by ID from .babyagent/skills/<id>/.
 func LoadSkill(id string) (Skill, error) {
+	if err := validateSkillID(id); err != nil {
+		return Skill{}, err
+	}
+
 	workspaceDir := shared.GetWorkspaceDir()
 	skillDir := filepath.Join(workspaceDir, ".babyagent", "skills", id)
 	instructionPath := filepath.Join(skillDir, "SKILL.md")
@@ -52,6 +62,12 @@ func LoadSkill(id string) (Skill, error) {
 	if fm.Name == "" {
 		return Skill{}, errors.New("skill must have a 'name' field in front matter")
 	}
+	if !skillIDPattern.MatchString(fm.Name) || len(fm.Name) > 64 {
+		return Skill{}, fmt.Errorf("invalid skill name %q: use 1-64 lowercase letters, digits and single hyphens", fm.Name)
+	}
+	if fm.Name != id {
+		return Skill{}, fmt.Errorf("skill name %q must match its directory name %q", fm.Name, id)
+	}
 
 	if fm.Description == "" {
 		return Skill{}, errors.New("skill must have a 'description' field in front matter")
@@ -75,6 +91,16 @@ func LoadSkill(id string) (Skill, error) {
 		Scripts:         scripts,
 		References:      references,
 	}, nil
+}
+
+func validateSkillID(id string) error {
+	if id == "" {
+		return errors.New("skill id is required")
+	}
+	if len(id) > 64 || !skillIDPattern.MatchString(id) {
+		return fmt.Errorf("invalid skill id %q: use 1-64 lowercase letters, digits and single hyphens", id)
+	}
+	return nil
 }
 
 func listFiles(baseDir, workspaceDir string) ([]string, error) {

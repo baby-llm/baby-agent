@@ -77,7 +77,9 @@ func (m *Manager) FormatForPrompt() string {
 	sb.WriteString("When a user request matches a skill's purpose, use the `load_skill` tool to load the full skill instructions.\n\n")
 
 	for _, loadedSkill := range m.skills {
-		sb.WriteString(fmt.Sprintf("- **%s**: %s\n", loadedSkill.Name, loadedSkill.Description))
+		// The model must call load_skill with the ID (directory name), so print
+		// that rather than the display name.
+		sb.WriteString(fmt.Sprintf("- **%s**: %s\n", loadedSkill.ID, loadedSkill.Description))
 	}
 
 	return sb.String()

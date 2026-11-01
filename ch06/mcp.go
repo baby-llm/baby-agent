@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -51,24 +53,59 @@ func (e *McpClient) Name() string {
 
 func (e *McpClient) connect(ctx context.Context) error {
 	// 服务联通，不需要再初始化
-	if e.session != nil && e.session.Ping(ctx, &mcp.PingParams{}) == nil {
-		return nil
+	if e.session != nil {
+		if e.session.Ping(ctx, &mcp.PingParams{}) == nil {
+			return nil
+		}
+		// Ping failed: close the stale session before replacing it, otherwise
+		// the old stdio process or HTTP connection leaks.
+		_ = e.Close()
 	}
+
 	var err error
 	if e.serverConfig.IsStdio() {
 		cmd := exec.Command(e.serverConfig.Command, e.serverConfig.Args...)
-		for k, v := range e.serverConfig.Env {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+		if len(e.serverConfig.Env) > 0 {
+			// Keep the parent environment (PATH, HOME, ...) and add overrides.
+			// Setting cmd.Env to only the configured map breaks `npx`/`node`.
+			cmd.Env = os.Environ()
+			for k, v := range e.serverConfig.Env {
+				cmd.Env = append(cmd.Env, k+"="+v)
+			}
 		}
 		e.session, err = e.client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
 	} else {
-		e.session, err = e.client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: e.serverConfig.Url}, nil)
+		httpClient := http.DefaultClient
+		if len(e.serverConfig.Headers) > 0 {
+			httpClient = &http.Client{
+				Transport: &headerRoundTripper{
+					base:    http.DefaultTransport,
+					headers: e.serverConfig.Headers,
+				},
+			}
+		}
+		e.session, err = e.client.Connect(ctx, &mcp.StreamableClientTransport{
+			Endpoint:   e.serverConfig.Url,
+			HTTPClient: httpClient,
+		}, nil)
 	}
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// Close releases the MCP session and the underlying stdio process / HTTP
+// connection. It is safe to call multiple times.
+func (e *McpClient) Close() error {
+	if e.session == nil {
+		return nil
+	}
+	err := e.session.Close()
+	e.session = nil
+	e.tools = nil
+	return err
 }
 
 func (e *McpClient) RefreshTools(ctx context.Context) error {
@@ -114,9 +151,15 @@ func (e *McpClient) callTool(ctx context.Context, toolName string, argumentsInJS
 
 	var builder strings.Builder
 	for _, content := range mcpResult.Content {
-		if textContent, ok := content.(*mcp.TextContent); ok {
-			builder.WriteString(textContent.Text)
+		switch c := content.(type) {
+		case *mcp.TextContent:
+			builder.WriteString(c.Text)
+		default:
+			builder.WriteString(fmt.Sprintf("[non-text content: %T]", c))
 		}
+	}
+	if mcpResult.IsError {
+		return builder.String(), fmt.Errorf("mcp tool %s returned an error: %s", toolName, builder.String())
 	}
 	return builder.String(), nil
 }
@@ -135,13 +178,32 @@ func (t *McpTool) ToolName() string {
 }
 
 func (t *McpTool) Info() openai.ChatCompletionToolUnionParam {
+	schema, ok := t.mcpTool.InputSchema.(map[string]any)
+	if !ok {
+		// A server may omit inputSchema or send a non-object schema. Falling
+		// back keeps the tool list usable instead of panicking.
+		log.Printf("mcp tool %s has non-object input schema %T; using an empty object schema", t.toolName, t.mcpTool.InputSchema)
+		schema = map[string]any{"type": "object", "properties": map[string]any{}}
+	}
 	return openai.ChatCompletionFunctionTool(shared2.FunctionDefinitionParam{
 		Description: openai.String(t.mcpTool.Description),
 		Name:        t.ToolName(),
-		Parameters:  t.mcpTool.InputSchema.(map[string]any),
+		Parameters:  schema,
 	})
 }
 
 func (t *McpTool) Execute(ctx context.Context, argumentsInJSON string) (string, error) {
 	return t.client.callTool(ctx, t.toolName, argumentsInJSON)
+}
+
+type headerRoundTripper struct {
+	base    http.RoundTripper
+	headers map[string]string
+}
+
+func (t *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	for key, value := range t.headers {
+		req.Header.Set(key, value)
+	}
+	return t.base.RoundTrip(req)
 }

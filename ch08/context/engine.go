@@ -116,6 +116,11 @@ func (c *Engine) GetContextUsage() float64 {
 
 func (c *Engine) recountTokens() {
 	totalTokens := 0
+	// The system prompt is sent on every request, so it belongs in the usage
+	// estimate; otherwise policies fire later than the real window allows.
+	if c.systemPromptTemplate != "" {
+		totalTokens += CountTokens(openai.SystemMessage(c.BuildSystemPrompt()))
+	}
 	for i := range c.messages {
 		totalTokens += c.messages[i].Tokens
 	}
@@ -138,7 +143,9 @@ func (c *Engine) applyPolicies(ctx context.Context) error {
 			return fmt.Errorf("apply policy %s: %w", policy.Name(), err)
 		}
 		c.messages = result.Messages
-		c.recountTokens()
+		// Policies compute the new count from the current one; use their result
+		// instead of silently discarding it and recounting.
+		c.contextTokens = result.ContextTokens
 	}
 	return nil
 }
