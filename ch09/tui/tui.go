@@ -33,6 +33,7 @@ const (
 
 type activeStream struct {
 	events    <-chan ch09.MessageVO
+	ctx       context.Context
 	cancel    context.CancelFunc
 	confirmCh chan ch09.ConfirmationAction
 
@@ -193,9 +194,10 @@ func (m *TuiViewModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleSubmit()
 	case "esc":
 		if m.state == stateAwaitingConfirmation {
-			// 拒绝并退出
-			if m.active != nil && m.active.confirmCh != nil {
-				m.active.confirmCh <- ch09.ConfirmReject
+			// ESC 直接取消本轮；cancel 会唤醒 agent 的确认 select，
+			// 避免模型重试同一工具时永久阻塞在 confirmCh 上。
+			if m.active != nil && m.active.cancel != nil {
+				m.active.cancel()
 			}
 			m.state = stateAborting
 			return m, nil
@@ -254,9 +256,10 @@ func (m *TuiViewModel) handleConfirmSelection() (tea.Model, tea.Cmd) {
 		action = ch09.ConfirmAlwaysAllow
 	}
 
-	go func() {
-		m.active.confirmCh <- action
-	}()
+	select {
+	case m.active.confirmCh <- action:
+	case <-m.active.ctx.Done():
+	}
 
 	m.state = stateRunning
 	m.selectedConfirmIdx = 0
@@ -390,6 +393,7 @@ func (m *TuiViewModel) startNewTurn(query string) (tea.Model, tea.Cmd) {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.active = &activeStream{
 		events:      streamC,
+		ctx:         ctx,
 		cancel:      cancel,
 		confirmCh:   confirmCh,
 		turnLogLen:  turnStart,

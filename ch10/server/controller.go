@@ -118,15 +118,19 @@ func (s *Server) createMessage(c *gin.Context) {
 		defer close(eventCh)
 		if err := s.CreateMessage(c.Request.Context(), conversationID, req, eventCh); err != nil {
 			errMsg := err.Error()
-			eventCh <- vo.SSEMessageVO{Event: agent.EventError, Content: &errMsg}
-			return
+			// The client may already be gone; never block the producer on a
+			// channel nobody is reading.
+			select {
+			case eventCh <- vo.SSEMessageVO{Event: agent.EventError, Content: &errMsg}:
+			case <-c.Request.Context().Done():
+			}
 		}
 	}()
 
 	for {
 		select {
 		case <-c.Request.Context().Done():
-			log.Warn("Server is shutting down. Exiting...")
+			log.Warn("Client disconnected, stopping SSE stream.")
 			return
 		case e, ok := <-eventCh:
 			if !ok {

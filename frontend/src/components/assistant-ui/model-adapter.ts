@@ -229,12 +229,18 @@ function appendToolCallPart(state: RunState, event: SSEMessageVO): void {
     args: parseToolArgs(argsText),
     argsText,
   })
+  // Text after a tool call belongs to a new part, so the live transcript keeps
+  // the same order as the persisted history (tool card, then the next answer).
+  state.textIndex = null
+  state.reasoningIndex = null
 }
 
 function appendToolResult(state: RunState, event: SSEMessageVO): void {
   const toolName = event.tool_call || DEFAULT_TOOL_NAME
   const result = parseToolResult(event.tool_result)
   const targetIndex = findPendingToolCallIndex(state.parts, toolName)
+  state.textIndex = null
+  state.reasoningIndex = null
 
   if (targetIndex === -1) {
     state.toolCallSequence += 1

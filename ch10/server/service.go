@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,7 +44,7 @@ func (s *Server) CreateConversation(req vo.CreateConversationReq) (vo.Conversati
 
 func (s *Server) ListConversations(userID string) ([]vo.ConversationVO, error) {
 	var convs []Conversation
-	query := s.db.Order("created_at desc")
+	query := s.db.Order("created_at desc, rowid desc")
 	if userID != "" {
 		query = query.Where("user_id = ?", userID)
 	}
@@ -98,7 +99,7 @@ func (s *Server) DeleteConversation(conversationID string) error {
 func (s *Server) ListMessages(conversationID string) ([]vo.ChatMessageVO, error) {
 	var msgs []ChatMessage
 	if err := s.db.Where("conversation_id = ?", conversationID).
-		Order("created_at asc").Find(&msgs).Error; err != nil {
+		Order("created_at asc, rowid asc").Find(&msgs).Error; err != nil {
 		return nil, err
 	}
 
@@ -129,7 +130,7 @@ func (s *Server) CreateMessage(ctx context.Context, conversationID string, req v
 	// 从历史消息构建 history
 	var historyMsgs []ChatMessage
 	if err := s.db.Where("conversation_id = ?", conversationID).
-		Order("created_at asc").Find(&historyMsgs).Error; err != nil {
+		Order("created_at asc, rowid asc").Find(&historyMsgs).Error; err != nil {
 		return err
 	}
 	history := buildHistory(historyMsgs, req.ParentMessageID)
@@ -138,24 +139,41 @@ func (s *Server) CreateMessage(ctx context.Context, conversationID string, req v
 	createdAt := time.Now().Unix()
 
 	eventCh := make(chan agent.StreamEvent, 64)
-	defer func() {
-		close(eventCh)
-	}()
-
+	// The pump is the only goroutine that writes to voCh. CreateMessage waits
+	// for it before returning, so the HTTP layer can safely close voCh after
+	// this function returns without racing with a pending send.
+	pumpDone := make(chan struct{})
 	go func() {
+		defer close(pumpDone)
 		for e := range eventCh {
-			voCh <- toSSEMessage(msgID, e)
+			select {
+			case voCh <- toSSEMessage(msgID, e):
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 
 	result, runErr := s.agent.RunStreaming(ctx, history, req.Query, eventCh)
+	close(eventCh)
+	<-pumpDone
+
 	if runErr != nil {
+		// The agent already emitted an EventError before returning; logging here
+		// avoids a duplicate error event on the wire.
 		log.Warnf("run streaming error: %v", runErr)
+		return nil
 	}
 
-	roundsJSON, _ := json.Marshal(result.Rounds)
-	usageJSON, _ := json.Marshal(result.Usage)
-	s.db.Create(&ChatMessage{
+	roundsJSON, err := json.Marshal(result.Rounds)
+	if err != nil {
+		return fmt.Errorf("marshal rounds: %w", err)
+	}
+	usageJSON, err := json.Marshal(result.Usage)
+	if err != nil {
+		return fmt.Errorf("marshal usage: %w", err)
+	}
+	if err := s.db.Create(&ChatMessage{
 		MessageID:       msgID,
 		UserID:          req.UserID,
 		ConversationID:  conversationID,
@@ -166,7 +184,9 @@ func (s *Server) CreateMessage(ctx context.Context, conversationID string, req v
 		Usage:           string(usageJSON),
 		Model:           s.agent.Model(),
 		CreatedAt:       createdAt,
-	})
+	}).Error; err != nil {
+		return fmt.Errorf("save message: %w", err)
+	}
 
 	return nil
 }

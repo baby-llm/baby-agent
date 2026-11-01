@@ -144,6 +144,10 @@ export function streamThreadRun({
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: USER_ID, query, parent_message_id: parentMessageId ?? '' }),
     signal: ctrl.signal,
+    // Do not abort the SSE request when the tab is hidden: the library would
+    // otherwise re-POST the same body on visibility change, creating a second
+    // message and a second agent run.
+    openWhenHidden: true,
     onmessage(ev) {
       const event = parseSSEMessage(ev.data)
       if (event) onEvent(event)

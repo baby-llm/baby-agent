@@ -111,10 +111,14 @@ func (a *Agent) RunStreaming(ctx context.Context, history []openai.ChatCompletio
 			if len(chunk.Choices) > 0 {
 				delta := chunk.Choices[0].Delta
 				if reasoningContent := reasoningText(delta); reasoningContent != "" {
-					eventCh <- StreamEvent{Event: EventReasoning, ReasoningContent: reasoningContent}
+					if !emitEvent(ctx, eventCh, StreamEvent{Event: EventReasoning, ReasoningContent: reasoningContent}) {
+						return RunResult{}, ctx.Err()
+					}
 				}
 				if delta.Content != "" {
-					eventCh <- StreamEvent{Event: EventContent, Content: delta.Content}
+					if !emitEvent(ctx, eventCh, StreamEvent{Event: EventContent, Content: delta.Content}) {
+						return RunResult{}, ctx.Err()
+					}
 				}
 			}
 		}
@@ -122,7 +126,9 @@ func (a *Agent) RunStreaming(ctx context.Context, history []openai.ChatCompletio
 		// defer 会等到函数返回才关闭，反而累积泄漏。Close 不影响后续 stream.Err() 读取。
 		stream.Close()
 		if err := stream.Err(); err != nil {
-			eventCh <- StreamEvent{Event: EventError, Content: err.Error()}
+			if !emitEvent(ctx, eventCh, StreamEvent{Event: EventError, Content: err.Error()}) {
+				return RunResult{}, ctx.Err()
+			}
 			return RunResult{}, err
 		}
 		if len(acc.Choices) == 0 {
@@ -143,14 +149,20 @@ func (a *Agent) RunStreaming(ctx context.Context, history []openai.ChatCompletio
 
 		// 执行 tool calls
 		for _, toolCall := range message.ToolCalls {
-			eventCh <- StreamEvent{Event: EventToolCall, ToolCall: toolCall.Function.Name, ToolArguments: toolCall.Function.Arguments}
+			if !emitEvent(ctx, eventCh, StreamEvent{Event: EventToolCall, ToolCall: toolCall.Function.Name, ToolArguments: toolCall.Function.Arguments}) {
+				return RunResult{}, ctx.Err()
+			}
 
 			toolResult, err := a.executeTool(ctx, toolCall)
 			if err != nil {
+				// A failed tool is part of the conversation, not a fatal stream
+				// error: return the error text to the model and let it decide
+				// what to do next. The UI renders it in the tool result card.
 				toolResult = err.Error()
-				eventCh <- StreamEvent{Event: EventError, Content: toolResult}
 			}
-			eventCh <- StreamEvent{Event: EventToolResult, ToolCall: toolCall.Function.Name, ToolResult: toolResult}
+			if !emitEvent(ctx, eventCh, StreamEvent{Event: EventToolResult, ToolCall: toolCall.Function.Name, ToolResult: toolResult}) {
+				return RunResult{}, ctx.Err()
+			}
 
 			toolMsg := openai.ToolMessage(toolResult, toolCall.ID)
 			messages = append(messages, toolMsg)
@@ -170,6 +182,19 @@ func (a *Agent) RunStreaming(ctx context.Context, history []openai.ChatCompletio
 		Rounds:   roundMessages,
 		Usage:    usage,
 	}, nil
+}
+
+// emitEvent sends an event to the stream, but aborts when the request context
+// is canceled (for example, the browser tab was closed). Every send in
+// RunStreaming goes through this helper so a disconnect cannot leave the agent
+// goroutine blocked on a full channel.
+func emitEvent(ctx context.Context, ch chan<- StreamEvent, e StreamEvent) bool {
+	select {
+	case ch <- e:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // reasoningText returns reasoning content from the SDK field added by the
