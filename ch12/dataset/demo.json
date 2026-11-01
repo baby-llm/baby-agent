@@ -1,0 +1,23 @@
+{
+  "name": "offline-demo",
+  "cases": [
+    {
+      "id": "direct-answer",
+      "query": "Say hello",
+      "expected_contains": ["hello"],
+      "max_loop_depth": 1,
+      "mock_responses": [{"content": "Hello from BabyAgent."}]
+    },
+    {
+      "id": "tool-loop",
+      "query": "Read the project README",
+      "expected_contains": ["README"],
+      "expected_tools": ["read"],
+      "max_loop_depth": 2,
+      "mock_responses": [
+        {"tool_calls": [{"id": "call-read", "name": "read", "arguments": "README.md"}]},
+        {"content": "The README describes BabyAgent."}
+      ]
+    }
+  ]
+}

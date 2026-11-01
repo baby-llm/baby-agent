@@ -31,13 +31,16 @@ jobs:
           fi
           echo "All files are properly formatted"
 
+      - name: Vet
+        run: go vet ./...
+
   test-and-build:
     name: Test and Build ${{ matrix.chapter }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        chapter: [ch01, ch02, ch03, ch04, ch05, ch06, ch07, ch08, ch09, ch10]
+        chapter: [ch01, ch02, ch03, ch04, ch05, ch06, ch07, ch08, ch09, ch10, ch11, ch12]
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -80,3 +83,7 @@ jobs:
       - name: Lint
         working-directory: frontend
         run: pnpm lint
+
+      - name: Build
+        working-directory: frontend
+        run: pnpm build
