@@ -7,7 +7,7 @@ import (
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/shared"
 
-	"babyagent/ch06/storage"
+	"babyagent/ch09/storage"
 )
 
 type LoadStorageTool struct {

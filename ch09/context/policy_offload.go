@@ -9,7 +9,7 @@ import (
 
 	"github.com/openai/openai-go/v3"
 
-	"babyagent/ch06/storage"
+	"babyagent/ch09/storage"
 	"babyagent/shared"
 )
 
