@@ -55,7 +55,10 @@ func main() {
 	homeStorage := storage.NewFileSystemStorage(filepath.Join(shared.GetHomeDir(), ".babyagent"))
 	workspaceStorage := storage.NewFileSystemStorage(filepath.Join(shared.GetWorkspaceDir(), ".babyagent"))
 	memoryUpdater := memory.NewLLMMemoryUpdater(appConf.LLMProviders.BackModel)
-	multiLevelMemory := memory.NewMultiLevelMemory(homeStorage, workspaceStorage, memoryUpdater)
+	multiLevelMemory, err := memory.NewMultiLevelMemory(homeStorage, workspaceStorage, memoryUpdater)
+	if err != nil {
+		log.Fatalf("Failed to load memory: %v", err)
+	}
 
 	contextEngine := ctxengine.NewContextEngine(multiLevelMemory, policies)
 
@@ -66,11 +69,16 @@ func main() {
 		},
 	}
 
+	bashTool, bashWarn := tool.CreateBashTool(shared.GetWorkspaceDir())
+	if bashWarn != nil {
+		log.Printf("WARNING: %v", bashWarn)
+	}
+
 	agent := ch08.NewAgent(
 		appConf.LLMProviders.FrontModel,
 		ch08.CodingAgentSystemPrompt,
 		confirmConfig,
-		[]tool.Tool{tool.CreateBashTool(shared.GetWorkspaceDir()), tool.NewLoadStorageTool(memoryStorage)},
+		[]tool.Tool{bashTool, tool.NewLoadStorageTool(memoryStorage)},
 		mcpClients,
 		contextEngine,
 	)

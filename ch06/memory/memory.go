@@ -2,6 +2,9 @@ package memory
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io/fs"
 	"strings"
 
 	"babyagent/ch06/storage"
@@ -24,7 +27,7 @@ type MultiLevelMemory struct {
 	updater MemoryUpdater
 }
 
-func NewMultiLevelMemory(globalStorage storage.Storage, workspaceStorage storage.Storage, u MemoryUpdater) *MultiLevelMemory {
+func NewMultiLevelMemory(globalStorage storage.Storage, workspaceStorage storage.Storage, u MemoryUpdater) (*MultiLevelMemory, error) {
 	m := &MultiLevelMemory{
 		globalStorage:    globalStorage,
 		globalKey:        "/memory/MEMORY.md",
@@ -32,18 +35,32 @@ func NewMultiLevelMemory(globalStorage storage.Storage, workspaceStorage storage
 		workspaceKey:     "/memory/MEMORY.md",
 		updater:          u,
 	}
-	m.content = m.load()
-	return m
+	content, err := m.load()
+	if err != nil {
+		return nil, err
+	}
+	m.content = content
+	return m, nil
 }
 
-func (m *MultiLevelMemory) load() MemoryContent {
+// load 只把“文件不存在”当作空记忆。权限错误或文件损坏必须上报，
+// 否则下一轮 Update 会把这个空内容写回磁盘，覆盖真正的记忆。
+func (m *MultiLevelMemory) load() (MemoryContent, error) {
 	ctx := context.Background()
 	content := MemoryContent{}
 
-	content.WorkspaceMemory, _ = m.workspaceStorage.Load(ctx, m.workspaceKey)
-	content.GlobalMemory, _ = m.globalStorage.Load(ctx, m.globalKey)
+	workspace, err := m.workspaceStorage.Load(ctx, m.workspaceKey)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return MemoryContent{}, fmt.Errorf("load workspace memory: %w", err)
+	}
+	global, err := m.globalStorage.Load(ctx, m.globalKey)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return MemoryContent{}, fmt.Errorf("load global memory: %w", err)
+	}
 
-	return content
+	content.WorkspaceMemory = workspace
+	content.GlobalMemory = global
+	return content, nil
 }
 
 func (m *MultiLevelMemory) String() string {
@@ -60,16 +77,18 @@ func (m *MultiLevelMemory) Update(ctx context.Context, newMessages []shared.Open
 		return err
 	}
 
+	oldMemory := m.content
 	if err := m.globalStorage.Store(ctx, m.globalKey, newMemory.GlobalMemory); err != nil {
 		return err
 	}
 	if err := m.workspaceStorage.Store(ctx, m.workspaceKey, newMemory.WorkspaceMemory); err != nil {
+		// 第二层写入失败时把第一层恢复，避免磁盘和内存长期不一致。
+		_ = m.globalStorage.Store(ctx, m.globalKey, oldMemory.GlobalMemory)
 		return err
 	}
 
-	// 更新内存中的 content
+	// 两个文件都写成功后再更新内存中的内容。
 	m.content = newMemory
-
 	return nil
 }
 

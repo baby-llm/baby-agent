@@ -13,6 +13,7 @@ import (
 	"babyagent/ch09"
 	ctxengine "babyagent/ch09/context"
 	"babyagent/ch09/memory"
+	"babyagent/ch09/skill"
 	"babyagent/ch09/storage"
 	"babyagent/ch09/tool"
 	"babyagent/ch09/tui"
@@ -55,9 +56,17 @@ func main() {
 	homeStorage := storage.NewFileSystemStorage(filepath.Join(shared.GetHomeDir(), ".babyagent"))
 	workspaceStorage := storage.NewFileSystemStorage(filepath.Join(shared.GetWorkspaceDir(), ".babyagent"))
 	memoryUpdater := memory.NewLLMMemoryUpdater(appConf.LLMProviders.BackModel)
-	multiLevelMemory := memory.NewMultiLevelMemory(homeStorage, workspaceStorage, memoryUpdater)
+	multiLevelMemory, err := memory.NewMultiLevelMemory(homeStorage, workspaceStorage, memoryUpdater)
+	if err != nil {
+		log.Fatalf("Failed to load memory: %v", err)
+	}
 
-	contextEngine := ctxengine.NewContextEngine(multiLevelMemory, policies)
+	skillManager := skill.NewManager()
+	if err := skillManager.LoadAll(); err != nil {
+		log.Printf("Failed to load skills: %v", err)
+	}
+
+	contextEngine := ctxengine.NewContextEngine(multiLevelMemory, policies, skillManager)
 
 	// 配置需要确认的工具
 	confirmConfig := ch09.ToolConfirmConfig{
@@ -67,9 +76,14 @@ func main() {
 	}
 
 	// Build tools list including load_skill
+	bashTool, bashWarn := tool.CreateBashTool(shared.GetWorkspaceDir())
+	if bashWarn != nil {
+		log.Printf("WARNING: %v", bashWarn)
+	}
+
 	tools := []tool.Tool{
 		tool.NewReadTool(),
-		tool.CreateBashTool(shared.GetWorkspaceDir()),
+		bashTool,
 		tool.NewLoadStorageTool(memoryStorage),
 		tool.NewLoadSkillTool(),
 	}

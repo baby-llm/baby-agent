@@ -6,7 +6,7 @@ import (
 	"github.com/openai/openai-go/v3"
 )
 
-type AgentTool = string
+type AgentTool string
 
 const (
 	AgentToolSemanticSearch AgentTool = "semantic_search"

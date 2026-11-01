@@ -3,8 +3,10 @@ package tool
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os/exec"
 	"runtime"
+	"strings"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/shared"
@@ -59,7 +61,9 @@ func (t *BashTool) Execute(ctx context.Context, argumentsInJSON string) (string,
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", err
+		// Return stdout/stderr even on failure: the model needs the compiler or
+		// shell message to fix its next attempt.
+		return string(output), fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
 	}
 	return string(output), nil
 }

@@ -1,6 +1,8 @@
 package server
 
 import (
+	"strings"
+
 	"github.com/libtnb/sqlite"
 	"gorm.io/gorm"
 )
@@ -29,9 +31,24 @@ type ChatMessage struct {
 }
 
 func InitDB(dsn string) (*gorm.DB, error) {
+	// busy_timeout + WAL keep concurrent SSE completions from failing with
+	// SQLITE_BUSY when two requests finish at the same time.
+	if !strings.Contains(dsn, "_pragma=") {
+		sep := "?"
+		if strings.Contains(dsn, "?") {
+			sep = "&"
+		}
+		dsn += sep + "_txlock=immediate&_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+	}
+
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, err
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		// SQLite has a single writer; serializing connections avoids lock
+		// contention in this teaching server.
+		sqlDB.SetMaxOpenConns(1)
 	}
 	err = db.AutoMigrate(&Conversation{}, &ChatMessage{})
 	if err != nil {

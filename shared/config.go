@@ -18,6 +18,10 @@ type ModelConfig struct {
 	Model   string `json:"model"`
 
 	ContextWindow int `json:"context_window"`
+	// ExtraBody is merged into every request body. It lets providers expose
+	// non-standard switches (for example {"thinking": {"type": "disabled"}})
+	// without teaching the rest of the code about vendor-specific fields.
+	ExtraBody map[string]any `json:"extra_body,omitempty"`
 }
 
 func NewModelConfig() ModelConfig {

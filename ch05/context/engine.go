@@ -30,10 +30,6 @@ type TokenBudget struct {
 	ContextWindow int
 }
 
-type Usage struct {
-	PromptTokens int
-}
-
 type TurnDraft struct {
 	NewMessages []shared.OpenAIMessage
 }
@@ -70,22 +66,25 @@ func (c *Engine) StartTurn(userMsg shared.OpenAIMessage) TurnDraft {
 	}
 }
 
-func (c *Engine) CommitTurn(ctx context.Context, draft TurnDraft, usage Usage) error {
+// CommitTurn 把本轮消息合并进上下文，然后运行压缩策略。草稿在提交前只存在于
+// 调用方，因此中途失败或取消不会污染历史。策略失败时回滚到提交前的状态，
+// 避免“用户看到失败、上下文却已经被改了一半”。
+func (c *Engine) CommitTurn(ctx context.Context, draft TurnDraft) error {
+	previousMessages := c.messages
+	previousTokens := c.contextTokens
+
 	for i := range draft.NewMessages {
 		msg := draft.NewMessages[i]
 		c.messages = append(c.messages, messageWrap{Message: msg, Tokens: CountTokens(msg)})
 	}
-
 	c.recountTokens()
 
 	if err := c.applyPolicies(ctx); err != nil {
+		c.messages = previousMessages
+		c.contextTokens = previousTokens
 		return err
 	}
 	return nil
-}
-
-func (c *Engine) AbortTurn(_ TurnDraft) {
-	// no-op: draft is only in-memory and never committed unless CommitTurn is called.
 }
 
 func (c *Engine) GetContextUsage() float64 {

@@ -1,88 +1,143 @@
 package server
 
 import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+
 	"babyagent/ch11/agent"
 	"babyagent/ch11/observe"
 	"babyagent/ch11/vo"
-	"github.com/gin-gonic/gin"
-	"net/http"
+	"babyagent/shared/log"
 )
 
 func NewRouter(s *Server, metrics *observe.Metrics) *gin.Engine {
-	r := gin.New()
-	r.Use(gin.Logger(), gin.Recovery(), observe.Middleware(metrics))
-	r.GET("/metrics", gin.WrapH(prometheusHandler()))
-	api := r.Group("/api")
+	g := gin.New()
+	g.Use(gin.Logger(), gin.Recovery(), observe.Middleware(metrics))
+
+	g.GET("/metrics", gin.WrapH(prometheusHandler()))
+
+	api := g.Group("/api")
 	api.POST("/conversation", s.createConversation)
 	api.GET("/conversation", s.listConversations)
-	api.GET("/conversation/:conversation_id/message", s.listMessages)
+	api.PATCH("/conversation/:conversation_id", s.renameConversation)
+	api.DELETE("/conversation/:conversation_id", s.deleteConversation)
 	api.POST("/conversation/:conversation_id/message", s.createMessage)
+	api.GET("/conversation/:conversation_id/message", s.listMessages)
 	api.GET("/trace/:trace_id", s.getTrace)
-	return r
+
+	return g
 }
+
+// POST /conversation
 func (s *Server) createConversation(c *gin.Context) {
 	var req vo.CreateConversationReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, vo.Err(400, err.Error()))
+		c.JSON(http.StatusBadRequest, vo.Err(400, err.Error()))
 		return
 	}
-	r, err := s.CreateConversation(req)
+
+	result, err := s.CreateConversation(req)
 	if err != nil {
-		c.JSON(500, vo.Err(500, err.Error()))
+		c.JSON(http.StatusInternalServerError, vo.Err(500, err.Error()))
 		return
 	}
-	c.JSON(200, vo.OK(r))
+
+	c.JSON(http.StatusOK, vo.OK(result))
 }
+
+// GET /conversation
 func (s *Server) listConversations(c *gin.Context) {
-	r, err := s.ListConversations(c.Query("user_id"))
+	userID := c.Query("user_id")
+
+	result, err := s.ListConversations(userID)
 	if err != nil {
-		c.JSON(500, vo.Err(500, err.Error()))
+		c.JSON(http.StatusInternalServerError, vo.Err(500, err.Error()))
 		return
 	}
-	c.JSON(200, vo.OK(r))
+
+	c.JSON(http.StatusOK, vo.OK(result))
 }
+
+// PATCH /conversation/:conversation_id
+func (s *Server) renameConversation(c *gin.Context) {
+	conversationID := c.Param("conversation_id")
+
+	var req vo.UpdateConversationReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, vo.Err(400, err.Error()))
+		return
+	}
+
+	result, err := s.RenameConversation(conversationID, req.Title)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, vo.Err(500, err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, vo.OK(result))
+}
+
+// DELETE /conversation/:conversation_id
+func (s *Server) deleteConversation(c *gin.Context) {
+	conversationID := c.Param("conversation_id")
+
+	if err := s.DeleteConversation(conversationID); err != nil {
+		c.JSON(http.StatusInternalServerError, vo.Err(500, err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, vo.OK(map[string]any{"conversation_id": conversationID}))
+}
+
+// GET /conversation/:conversation_id/message
 func (s *Server) listMessages(c *gin.Context) {
-	r, err := s.ListMessages(c.Param("conversation_id"))
+	conversationID := c.Param("conversation_id")
+
+	result, err := s.ListMessages(conversationID)
 	if err != nil {
-		c.JSON(500, vo.Err(500, err.Error()))
+		c.JSON(http.StatusInternalServerError, vo.Err(500, err.Error()))
 		return
 	}
-	c.JSON(200, vo.OK(r))
+
+	c.JSON(http.StatusOK, vo.OK(result))
 }
-func (s *Server) getTrace(c *gin.Context) {
-	r, err := s.GetTrace(c.Param("trace_id"))
-	if err != nil {
-		c.JSON(404, vo.Err(404, err.Error()))
-		return
-	}
-	c.JSON(200, vo.OK(r))
-}
+
+// POST /conversation/:conversation_id/message
+// 创建新消息并 SSE 流式输出 agent 响应
 func (s *Server) createMessage(c *gin.Context) {
+	conversationID := c.Param("conversation_id")
+
 	var req vo.CreateMessageReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, vo.Err(400, err.Error()))
 		return
 	}
-	ch := make(chan vo.SSEMessageVO, 64)
+
+	eventCh := make(chan vo.SSEMessageVO, 64)
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+
 	go func() {
-		defer close(ch)
-		if err := s.CreateMessage(c.Request.Context(), c.Param("conversation_id"), req, ch); err != nil {
-			message := err.Error()
+		defer close(eventCh)
+		if err := s.CreateMessage(c.Request.Context(), conversationID, req, eventCh); err != nil {
+			errMsg := err.Error()
 			// The client may already be gone; never block the producer on a
 			// channel nobody is reading.
 			select {
-			case ch <- vo.SSEMessageVO{Event: agent.EventError, Content: &message}:
+			case eventCh <- vo.SSEMessageVO{Event: agent.EventError, Content: &errMsg}:
 			case <-c.Request.Context().Done():
 			}
 		}
 	}()
+
 	for {
 		select {
 		case <-c.Request.Context().Done():
+			log.Warn("Client disconnected, stopping SSE stream.")
 			return
-		case e, ok := <-ch:
+		case e, ok := <-eventCh:
 			if !ok {
 				return
 			}
@@ -90,4 +145,14 @@ func (s *Server) createMessage(c *gin.Context) {
 			c.Writer.Flush()
 		}
 	}
+}
+
+// GET /trace/:trace_id
+func (s *Server) getTrace(c *gin.Context) {
+	result, err := s.GetTrace(c.Param("trace_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, vo.Err(404, err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, vo.OK(result))
 }

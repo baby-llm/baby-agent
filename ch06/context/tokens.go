@@ -2,7 +2,7 @@ package context
 
 import (
 	"encoding/json"
-	"log"
+	"sync"
 
 	"github.com/tiktoken-go/tokenizer"
 
@@ -14,14 +14,18 @@ import (
 // unrealistically small for short messages.
 const perMessageTokenOverhead = 4
 
-var tokenEnc tokenizer.Codec
+var (
+	tokenEncOnce sync.Once
+	tokenEnc     tokenizer.Codec
+)
 
-func init() {
-	var err error
-	tokenEnc, err = tokenizer.Get(tokenizer.Cl100kBase)
-	if err != nil {
-		log.Fatal(err)
-	}
+func getTokenEncoder() tokenizer.Codec {
+	tokenEncOnce.Do(func() {
+		// Loading the encoding is a local operation; if it ever fails we fall
+		// back to a rough character estimate instead of exiting the process.
+		tokenEnc, _ = tokenizer.Get(tokenizer.Cl100kBase)
+	})
+	return tokenEnc
 }
 
 func CountTokens(message shared.OpenAIMessage) int {
@@ -43,6 +47,11 @@ func CountTokens(message shared.OpenAIMessage) int {
 }
 
 func countText(text string) int {
-	count, _ := tokenEnc.Count(text)
+	enc := getTokenEncoder()
+	if enc == nil {
+		// ~4 characters per token is the usual rule of thumb for English.
+		return len([]rune(text)) / 4
+	}
+	count, _ := enc.Count(text)
 	return count
 }

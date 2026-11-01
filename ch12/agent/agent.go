@@ -43,12 +43,17 @@ func (a *Agent) Run(ctx context.Context, query string) (Result, error) {
 		}
 		for _, call := range completion.ToolCalls {
 			tool, ok := a.tools[call.Name]
+			var output string
+			var err error
 			if !ok {
-				return result, fmt.Errorf("tool not found: %s", call.Name)
-			}
-			output, err := tool.Execute(ctx, call.Arguments)
-			if err != nil {
-				return result, fmt.Errorf("execute tool %s: %w", call.Name, err)
+				// 与 ch10/ch11 保持一致：工具失败作为 tool result 回填，
+				// 由模型决定下一步，而不是直接终止整轮。
+				output = fmt.Sprintf("tool not found: %s", call.Name)
+			} else {
+				output, err = tool.Execute(ctx, call.Arguments)
+				if err != nil {
+					output = err.Error()
+				}
 			}
 			result.ToolCalls = append(result.ToolCalls, call.Name)
 			toolMessage := Message{Role: "tool", Content: output, ToolCallID: call.ID}

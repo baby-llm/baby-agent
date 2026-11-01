@@ -3,6 +3,7 @@ package tool
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 
@@ -63,20 +64,29 @@ func (t *EditTool) Execute(ctx context.Context, argumentsInJSON string) (string,
 		return "", err
 	}
 
+	if p.Before == "" {
+		return "", fmt.Errorf("before must not be empty")
+	}
+	if count := strings.Count(string(raw), p.Before); count != 1 {
+		return "", fmt.Errorf("before must match exactly once, matched %d times", count)
+	}
+
 	backupPath := p.Path + ".bak"
 	err = os.WriteFile(backupPath, raw, 0644)
 	if err != nil {
 		return "", err
 	}
 
-	replaced := strings.ReplaceAll(string(raw), p.Before, p.After)
+	replaced := strings.Replace(string(raw), p.Before, p.After, 1)
 
 	err = os.WriteFile(p.Path, []byte(replaced), 0644)
 	if err != nil {
-		os.Rename(backupPath, p.Path)
+		_ = os.Rename(backupPath, p.Path)
 		return "", err
 	}
 
-	os.Remove(backupPath)
-	return "", nil
+	if err := os.Remove(backupPath); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("edited %s", p.Path), nil
 }

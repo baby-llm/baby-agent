@@ -51,13 +51,13 @@ func NewAgent(modelConf shared.ModelConfig, systemPrompt string, confirmConfig T
 }
 
 func (a *Agent) findTool(toolName string) (tool.Tool, bool) {
-	t, ok := a.nativeTools[toolName]
+	t, ok := a.nativeTools[tool.AgentTool(toolName)]
 	if ok {
 		return t, true
 	}
 	for _, mcpClient := range a.mcpClients {
 		for _, t := range mcpClient.GetTools() {
-			if t.ToolName() == toolName {
+			if string(t.ToolName()) == toolName {
 				return t, true
 			}
 		}
@@ -82,6 +82,8 @@ func (a *Agent) buildTools() []openai.ChatCompletionToolUnionParam {
 
 func (a *Agent) ResetSession() {
 	a.contextEngine.Reset()
+	// /clear 同时撤销“始终允许”，否则新会话仍会跳过危险命令确认。
+	a.alwaysAllowTools = make(map[tool.AgentTool]bool)
 }
 
 // RunStreaming 和 Run 基本逻辑一致，但是使用流式请求，并且通过 channel 实现流式输出
@@ -109,12 +111,10 @@ func (a *Agent) RunStreaming(ctx context.Context, query string, viewCh chan Mess
 	defer a.contextEngine.SetMemoryEventHook(nil)
 
 	draft := a.contextEngine.StartTurn(openai.UserMessage(query))
-	defer a.contextEngine.AbortTurn(draft)
 
 	// 为本轮次创建新的消息链。草稿消息在 commit 前不会污染上下文。
 	messages := a.contextEngine.BuildRequestMessages()
 	messages = append(messages, draft.NewMessages...)
-	var usage openai.CompletionUsage
 	for {
 		params := openai.ChatCompletionNewParams{
 			Model:    a.model,
@@ -162,7 +162,6 @@ func (a *Agent) RunStreaming(ctx context.Context, query string, viewCh chan Mess
 			log.Printf("no choices returned, resp: %v", acc)
 			return nil
 		}
-		usage = acc.Usage
 		message := acc.Choices[0].Message
 		// 拼接 assistant message 到整体消息链中
 		assistantMsg := message.ToParam()
@@ -244,14 +243,14 @@ func (a *Agent) RunStreaming(ctx context.Context, query string, viewCh chan Mess
 		select {
 		case <-ctx.Done():
 			// 用户按 ESC，保存消息但不执行 policies/memory
-			_ = a.contextEngine.CommitTurn(ctx, draft, ctxengine.Usage{PromptTokens: int(usage.TotalTokens)}, true)
+			_ = a.contextEngine.CommitTurn(ctx, draft, true)
 			return nil
 		default:
 		}
 
 	}
 
-	err := a.contextEngine.CommitTurn(ctx, draft, ctxengine.Usage{PromptTokens: int(usage.TotalTokens)}, false)
+	err := a.contextEngine.CommitTurn(ctx, draft, false)
 	return err
 }
 

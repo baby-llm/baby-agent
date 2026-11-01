@@ -271,3 +271,65 @@ func TestOffloadPolicyShouldApply(t *testing.T) {
 		t.Fatalf("ShouldApply() = false, want true")
 	}
 }
+
+func TestSummaryPolicyApply_KeepZeroDoesNotPanic(t *testing.T) {
+	s := &fakeSummarizer{
+		limit: 1000,
+		fn: func(_ string, _ []shared.OpenAIMessage) (string, error) {
+			return "summary", nil
+		},
+	}
+	engine := buildEngine([]shared.OpenAIMessage{
+		openai.UserMessage("u1"),
+		openai.AssistantMessage("a1"),
+	})
+
+	result, err := NewSummaryPolicy(s, 0, 10, 0.8).Apply(context.Background(), engine)
+	if err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("len(Messages) = %d, want 2", len(result.Messages))
+	}
+}
+
+func TestOffloadPolicyApply_DoesNotSplitRunes(t *testing.T) {
+	st := &fakeStorage{store: map[string]string{}}
+	content := strings.Repeat("你", 20)
+	engine := buildEngine([]shared.OpenAIMessage{
+		openai.ToolMessage(content, "call-1"),
+	})
+
+	result, err := NewOffloadPolicy(st, 0.8, 0, 5).Apply(context.Background(), engine)
+	if err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+	got := contentString(t, result.Messages[0].Message)
+	if !strings.HasPrefix(got, strings.Repeat("你", 5)) {
+		t.Fatalf("preview = %q, want 5 whole runes", got)
+	}
+}
+
+type failingPolicy struct{}
+
+func (failingPolicy) Name() string { return "fail" }
+func (failingPolicy) ShouldApply(context.Context, *Engine) bool {
+	return true
+}
+func (failingPolicy) Apply(context.Context, *Engine) (PolicyResult, error) {
+	return PolicyResult{}, errors.New("boom")
+}
+
+func TestEngineCommitTurnRollsBackOnPolicyFailure(t *testing.T) {
+	engine := NewContextEngine(nil, []Policy{failingPolicy{}}, nil)
+	engine.Init("system", TokenBudget{ContextWindow: 1000})
+	before := len(engine.messages)
+
+	err := engine.CommitTurn(context.Background(), engine.StartTurn(openai.UserMessage("hi")), false)
+	if err == nil {
+		t.Fatal("CommitTurn() error = nil, want policy failure")
+	}
+	if len(engine.messages) != before {
+		t.Fatalf("len(messages) = %d, want rollback to %d", len(engine.messages), before)
+	}
+}

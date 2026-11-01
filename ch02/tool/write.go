@@ -3,6 +3,7 @@ package tool
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 
 	"github.com/openai/openai-go/v3"
@@ -63,5 +64,5 @@ func (t *WriteTool) Execute(ctx context.Context, argumentsInJSON string) (string
 		return "", err
 	}
 
-	return "", nil
+	return fmt.Sprintf("wrote %d bytes to %s", len(p.Content), p.Path), nil
 }

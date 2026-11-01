@@ -21,8 +21,8 @@ func DefaultHTTPEmbeddingConfig(apiKey string) HTTPEmbeddingConfig {
 	return HTTPEmbeddingConfig{
 		APIKey:     apiKey,
 		BaseURL:    "",
-		Model:      "embedding",
-		Dimensions: 512,
+		Model:      DefaultEmbeddingModel,
+		Dimensions: DefaultDimensions,
 	}
 }
 

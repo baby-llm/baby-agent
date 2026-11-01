@@ -38,7 +38,7 @@ func (p *OffloadPolicy) Name() string {
 }
 
 func (p *OffloadPolicy) makeStorageKey(offloadIndex int) string {
-	return fmt.Sprintf("/offload/%s_%d", time.Now().Format("20060102_150405"), offloadIndex)
+	return fmt.Sprintf("/offload/%d_%d", time.Now().UnixNano(), offloadIndex)
 }
 
 func (p *OffloadPolicy) Apply(ctx context.Context, engine *Engine) (PolicyResult, error) {
@@ -67,8 +67,9 @@ func (p *OffloadPolicy) Apply(ctx context.Context, engine *Engine) (PolicyResult
 		if !ok {
 			continue
 		}
-		// 不需要卸载
-		if len(*contentStr) <= p.PreviewCharLimit {
+		// 不需要卸载（按 rune 比较，避免把中文/emoji 截断成半个字符）
+		runes := []rune(*contentStr)
+		if len(runes) <= p.PreviewCharLimit {
 			continue
 		}
 
@@ -82,7 +83,7 @@ func (p *OffloadPolicy) Apply(ctx context.Context, engine *Engine) (PolicyResult
 		}
 
 		// 构造卸载后的消息体正文
-		abstract := (*contentStr)[0:p.PreviewCharLimit]
+		abstract := string(runes[:p.PreviewCharLimit])
 		var b strings.Builder
 		b.WriteString(abstract)
 		b.WriteString("...")
@@ -90,7 +91,7 @@ func (p *OffloadPolicy) Apply(ctx context.Context, engine *Engine) (PolicyResult
 		newContent := b.String()
 
 		// 修改原始消息链中的消息
-		newMessage := openai.ToolMessage(newContent, *engine.messages[i].Message.GetToolCallID())
+		newMessage := openai.ToolMessage(newContent, engine.messages[i].Message.OfTool.ToolCallID)
 
 		// 计算新消息的 token 数并更新计数
 		newTokens := CountTokens(newMessage)

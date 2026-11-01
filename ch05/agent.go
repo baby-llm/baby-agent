@@ -45,14 +45,14 @@ func NewAgent(modelConf shared.ModelConfig, systemPrompt string, tools []tool.To
 
 func (a *Agent) execute(ctx context.Context, toolName string, argumentsInJSON string) (string, error) {
 	// 判断 native tool
-	t, ok := a.nativeTools[toolName]
+	t, ok := a.nativeTools[tool.AgentTool(toolName)]
 	if ok {
 		return t.Execute(ctx, argumentsInJSON)
 	}
 	// 判断 MCP Tool
 	for _, mcpClient := range a.mcpClients {
 		for _, t := range mcpClient.GetTools() {
-			if t.ToolName() != toolName {
+			if string(t.ToolName()) != toolName {
 				continue
 			}
 			return t.Execute(ctx, argumentsInJSON)
@@ -95,12 +95,10 @@ func (a *Agent) RunStreaming(ctx context.Context, query string, viewCh chan Mess
 	defer a.contextEngine.SetPolicyEventHook(nil)
 
 	draft := a.contextEngine.StartTurn(openai.UserMessage(query))
-	defer a.contextEngine.AbortTurn(draft)
 
 	// 为本轮次创建新的消息链。草稿消息在 commit 前不会污染上下文。
 	messages := a.contextEngine.BuildRequestMessages()
 	messages = append(messages, draft.NewMessages...)
-	var usage openai.CompletionUsage
 	for {
 		params := openai.ChatCompletionNewParams{
 			Model:    a.model,
@@ -148,7 +146,6 @@ func (a *Agent) RunStreaming(ctx context.Context, query string, viewCh chan Mess
 			log.Printf("no choices returned, resp: %v", acc)
 			return nil
 		}
-		usage = acc.Usage
 		message := acc.Choices[0].Message
 		// 拼接 assistant message 到整体消息链中
 		assistantMsg := message.ToParam()
@@ -189,7 +186,7 @@ func (a *Agent) RunStreaming(ctx context.Context, query string, viewCh chan Mess
 
 	}
 
-	err := a.contextEngine.CommitTurn(ctx, draft, ctxengine.Usage{PromptTokens: int(usage.TotalTokens)})
+	err := a.contextEngine.CommitTurn(ctx, draft)
 	return err
 }
 

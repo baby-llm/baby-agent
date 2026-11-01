@@ -30,6 +30,7 @@ export interface RoundMessageVO {
 
 export interface ChatMessageVO {
   message_id: string
+  trace_id?: string
   conversation_id: string
   parent_message_id: string
   query: string
@@ -41,6 +42,7 @@ export interface ChatMessageVO {
 
 export interface SSEMessageVO {
   message_id: string
+  trace_id?: string
   event: 'error' | 'reasoning' | 'content' | 'tool_call' | 'tool_result'
   content?: string
   reasoning_content?: string

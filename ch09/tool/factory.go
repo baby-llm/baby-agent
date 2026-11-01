@@ -1,30 +1,30 @@
 package tool
 
 import (
-	"log"
+	"context"
+	"errors"
 	"os/exec"
+	"time"
 )
 
-// checkDockerAvailable checks if docker command is available
+// checkDockerAvailable checks whether the docker CLI and daemon respond.
+// A short timeout matters: a stuck daemon must not hang agent startup.
 func checkDockerAvailable() bool {
-	// Use `docker ps` to check if docker daemon is running
-	// `docker ps` will fail if docker daemon is not running
-	cmd := exec.Command("docker", "ps")
-	return cmd.Run() == nil
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return exec.CommandContext(ctx, "docker", "ps").Run() == nil
 }
 
 // CreateBashTool creates a bash tool, automatically choosing between
 // DockerBashTool (if docker is available) and regular BashTool.
-func CreateBashTool(workspaceDir string) Tool {
+// The returned error is a warning: the caller gets a working tool either way,
+// but should surface that sandbox isolation is not active.
+func CreateBashTool(workspaceDir string) (Tool, error) {
 	if !checkDockerAvailable() {
-		log.Printf("Docker not available, using regular bash tool")
-		return NewBashTool()
+		return NewBashTool(), errors.New("docker unavailable; falling back to host bash (no sandbox isolation)")
 	}
 	if workspaceDir == "" {
-		log.Printf("Docker available but workspace dir is empty, using regular bash tool")
-		return NewBashTool()
+		return NewBashTool(), errors.New("workspace dir is empty; falling back to host bash (no sandbox isolation)")
 	}
-	containerName := generateContainerName(workspaceDir)
-	log.Printf("Docker available, using DockerBashTool with sandbox container '%s'", containerName)
-	return NewDockerBashTool("", workspaceDir)
+	return NewDockerBashTool("", workspaceDir), nil
 }

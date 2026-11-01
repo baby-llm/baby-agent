@@ -2,6 +2,7 @@ package vo
 
 type SSEMessageVO struct {
 	MessageID        string  `json:"message_id"`
+	TraceID          string  `json:"trace_id,omitempty"`
 	Event            string  `json:"event"`
 	Content          *string `json:"content,omitempty"`
 	ReasoningContent *string `json:"reasoning_content,omitempty"`

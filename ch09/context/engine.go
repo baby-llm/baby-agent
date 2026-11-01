@@ -3,13 +3,13 @@ package context
 import (
 	"context"
 	"fmt"
+	"log"
 	"runtime"
 	"strings"
 
 	"github.com/openai/openai-go/v3"
 
 	"babyagent/ch09/memory"
-	"babyagent/ch09/skill"
 	"babyagent/shared"
 )
 
@@ -35,22 +35,16 @@ type TokenBudget struct {
 	ContextWindow int
 }
 
-type Usage struct {
-	PromptTokens int
-}
-
 type TurnDraft struct {
 	NewMessages []shared.OpenAIMessage
 }
 
-// SkillManager is the interface for accessing skill metadata
+// SkillManager is the interface for accessing skill metadata.
 type SkillManager interface {
 	FormatForPrompt() string
 }
 
-func NewContextEngine(memory memory.Memory, policies []Policy) *Engine {
-	skillManager := skill.NewManager()
-	_ = skillManager.LoadAll()
+func NewContextEngine(memory memory.Memory, policies []Policy, skillManager SkillManager) *Engine {
 	return &Engine{
 		policies:      policies,
 		messages:      make([]messageWrap, 0),
@@ -84,8 +78,12 @@ func (c *Engine) StartTurn(userMsg shared.OpenAIMessage) TurnDraft {
 	}
 }
 
-func (c *Engine) CommitTurn(ctx context.Context, draft TurnDraft, usage Usage, skipPoliciesAndMemory bool) error {
-	// 根据情况压缩上下文
+// CommitTurn 把本轮消息合并进上下文、运行压缩策略、更新长期记忆。
+// 用户按 ESC 取消时传 skipPoliciesAndMemory=true，只保存已产生的消息。
+func (c *Engine) CommitTurn(ctx context.Context, draft TurnDraft, skipPoliciesAndMemory bool) error {
+	previousMessages := c.messages
+	previousTokens := c.contextTokens
+
 	for i := range draft.NewMessages {
 		msg := draft.NewMessages[i]
 		c.messages = append(c.messages, messageWrap{Message: msg, Tokens: CountTokens(msg)})
@@ -97,24 +95,24 @@ func (c *Engine) CommitTurn(ctx context.Context, draft TurnDraft, usage Usage, s
 	}
 
 	if err := c.applyPolicies(ctx); err != nil {
+		c.messages = previousMessages
+		c.contextTokens = previousTokens
 		return err
 	}
-	// 更新记忆
-	if c.onMemoryEvent != nil {
-		c.onMemoryEvent(true, nil)
-	}
-	err := c.memory.Update(ctx, draft.NewMessages)
-	if c.onMemoryEvent != nil {
-		c.onMemoryEvent(false, err)
-	}
-	if err != nil {
-		return err
+
+	if c.memory != nil {
+		if c.onMemoryEvent != nil {
+			c.onMemoryEvent(true, nil)
+		}
+		err := c.memory.Update(ctx, draft.NewMessages)
+		if c.onMemoryEvent != nil {
+			c.onMemoryEvent(false, err)
+		}
+		if err != nil {
+			log.Printf("update memory: %v", err)
+		}
 	}
 	return nil
-}
-
-func (c *Engine) AbortTurn(_ TurnDraft) {
-	// no-op: draft is only in-memory and never committed unless CommitTurn is called.
 }
 
 func (c *Engine) GetContextUsage() float64 {
@@ -178,12 +176,10 @@ func (c *Engine) BuildSystemPrompt() string {
 	} else {
 		replaceMap["{memory}"] = ""
 	}
-
-	// Add skills metadata
 	if c.skillManager != nil {
 		replaceMap["{skills}"] = c.skillManager.FormatForPrompt()
 	} else {
-		replaceMap["{skills}"] = ""
+		replaceMap["{skills}"] = "No skills available."
 	}
 
 	prompt := c.systemPromptTemplate

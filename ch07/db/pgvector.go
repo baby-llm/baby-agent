@@ -65,8 +65,7 @@ type Config struct {
 // NewPGVectorStore 创建一个新的 PGVectorStore
 func NewPGVectorStore(config Config) (*PGVectorStore, error) {
 	if config.Dimension == 0 {
-		// Keep this in sync with rag.DefaultHTTPEmbeddingConfig.
-		config.Dimension = 512
+		config.Dimension = rag.DefaultDimensions
 	}
 
 	dsn := config.DSN

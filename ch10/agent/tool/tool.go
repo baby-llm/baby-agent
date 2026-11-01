@@ -6,7 +6,7 @@ import (
 	"github.com/openai/openai-go/v3"
 )
 
-type AgentTool = string
+type AgentTool string
 
 const (
 	AgentToolBash AgentTool = "bash"

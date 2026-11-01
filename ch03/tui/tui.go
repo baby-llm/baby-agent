@@ -447,6 +447,7 @@ func (m *TuiViewModel) scrollDown(n int) {
 }
 
 func (m *TuiViewModel) logsHeaderHeight() int {
+	// 标题、分隔线、欢迎语、模型名各占一行。
 	return 4
 }
 
@@ -489,7 +490,8 @@ func (m *TuiViewModel) refreshLogsViewportContent() {
 		lines[i] = entry.Render()
 	}
 	m.logsViewport.SetContent(strings.Join(lines, "\n\n"))
-	if !atBottom {
+	if atBottom {
+		// 用户在底部时跟随新输出；否则保持当前滚动位置，方便回看历史。
 		m.logsViewport.GotoBottom()
 		return
 	}
@@ -506,6 +508,7 @@ func (m *TuiViewModel) View() tea.View {
 	b.WriteString(borderStyle.Render(strings.Repeat("─", 48)))
 	b.WriteString("\n")
 	b.WriteString(contentStyle.Render("欢迎使用，输入问题后回车。"))
+	b.WriteString("\n")
 	b.WriteString(labelStyle.Render("当前模型: "))
 	b.WriteString(contentStyle.Render(m.modelName))
 	b.WriteString("\n")

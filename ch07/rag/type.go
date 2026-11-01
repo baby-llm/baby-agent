@@ -7,6 +7,13 @@ import (
 
 type Vector = []float32
 
+const (
+	// DefaultEmbeddingModel and DefaultDimensions match OpenAI's standard
+	// embedding model. Override them for local or vendor-specific services.
+	DefaultEmbeddingModel = "text-embedding-3-small"
+	DefaultDimensions     = 1536
+)
+
 type VectorPoint struct {
 	Vector Vector `json:"vector"`
 	Chunk  Chunk  `json:"chunk"`
