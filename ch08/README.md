@@ -58,10 +58,10 @@
 
 **容器命名规则**：
 
-- 项目目录 `/home/user/project-a` → 容器名 `babyagent-sandbox-project-a`
-- 项目目录 `/home/user/project-b` → 容器名 `babyagent-sandbox-project-b`
+- 项目目录 `/home/user/project-a` → 容器名 `babyagent-sandbox-project-a-{hash}`
+- 项目目录 `/home/user/project-b` → 容器名 `babyagent-sandbox-project-b-{hash}`
 
-这样每个工作区都有独立的沙盒环境，互不干扰。
+`{hash}` 来自工作区绝对路径的短哈希，避免两个同名目录（如 `~/a/project` 与 `~/b/project`）共用同一个容器。这样每个工作区都有独立的沙盒环境，互不干扰。
 
 **工具工厂模式**：
 
@@ -237,9 +237,11 @@ MCP 工具使用完整工具名（如 `babyagent_mcp__filesystem__write_file`）
 ### Docker 沙盒配置
 
 默认配置（可在 `ch08/tool/docker_bash.go` 中修改）：
-- 容器名称：`babyagent-sandbox-{项目名}`（每个工作区独立）
+- 容器名称：`babyagent-sandbox-{项目名}-{路径哈希}`（每个工作区独立）
 - 镜像：`alpine:3.19`
 - 工作目录：自动挂载当前项目目录到 `/workspace`
+
+> **实现状态**：Docker 不可用时，工具工厂会在构造阶段降级到普通 bash；如果 Docker 可用但容器启动或 `docker exec` 失败，不会在运行时静默降级（安全优先），而是直接返回错误。
 
 ---
 

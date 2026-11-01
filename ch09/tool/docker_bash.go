@@ -2,10 +2,13 @@ package tool
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/openai/openai-go/v3"
@@ -17,14 +20,26 @@ const (
 	DefaultSandboxImage     = "alpine:3.19"
 )
 
-// generateContainerName generates a unique container name based on workspace directory
+var invalidContainerChars = regexp.MustCompile(`[^a-z0-9_.-]+`)
+
+// generateContainerName generates a Docker-safe name that is unique per
+// workspace path. Using only the basename makes two workspaces with the same
+// directory name (e.g. ~/a/project and ~/b/project) share one container.
 func generateContainerName(workspaceDir string) string {
-	// Use the project directory name as suffix
-	projectName := filepath.Base(workspaceDir)
-	if projectName == "" || projectName == "." || projectName == "/" {
-		return DefaultSandboxContainer
+	abs, err := filepath.Abs(workspaceDir)
+	if err != nil {
+		abs = workspaceDir
 	}
-	return fmt.Sprintf("%s-%s", DefaultSandboxContainer, projectName)
+
+	projectName := strings.ToLower(filepath.Base(abs))
+	projectName = invalidContainerChars.ReplaceAllString(projectName, "-")
+	projectName = strings.Trim(projectName, "-_.")
+	if projectName == "" || projectName == "." {
+		projectName = "workspace"
+	}
+
+	sum := sha256.Sum256([]byte(abs))
+	return fmt.Sprintf("%s-%s-%x", DefaultSandboxContainer, projectName, sum[:4])
 }
 
 type DockerBashTool struct {

@@ -279,6 +279,8 @@ babyagent_mcp__{serverName}__{toolName}
 - `nativeTools`：本地实现的工具（read / write / edit / bash）
 - `mcpClients`：通过 MCP 动态加载的工具集合
 
+> **实现状态**：ch04 的 `main` 只注册 `bash` 作为本地工具；`read` / `write` / `edit` 由 MCP filesystem server 提供，不是原生工具。
+
 在 `buildTools()` 时统一注册给模型；在 `execute()` 时先查本地工具，再查 MCP 工具，确保两类工具可以无缝共存。
 
 这使得 Agent 的工具能力具备“本地 + 远程”双模式：

@@ -196,6 +196,8 @@ if chunk.Content != nil {
 - `ch03/agent.go`：增强后的 Agent Loop（流式 + 多种 reasoning 字段解析 + MCP 支持见第四章）
 - `ch03/tui/tui.go`：Bubble Tea TUI 可视化界面
 
+> **实现状态**：本章只注册 `bash` 工具；`read` / `write` / `edit` 在第二章介绍，从第四章起文件操作改由 MCP filesystem 工具提供。
+
 ---
 
 ## 🚀 动手运行
