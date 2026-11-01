@@ -138,17 +138,25 @@ func (s *Server) CreateMessage(ctx context.Context, conversationID string, req v
 	createdAt := time.Now().Unix()
 
 	eventCh := make(chan agent.StreamEvent, 64)
-	defer func() {
-		close(eventCh)
-	}()
+	forwardDone := make(chan struct{})
 
 	go func() {
+		defer close(forwardDone)
 		for e := range eventCh {
-			voCh <- toSSEMessage(msgID, e)
+			select {
+			case voCh <- toSSEMessage(msgID, e):
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 
 	result, runErr := s.agent.RunStreaming(ctx, history, req.Query, eventCh)
+	close(eventCh)
+	// Ensure every agent event has been forwarded before returning. The controller
+	// closes voCh when CreateMessage returns, so returning earlier can drop SSE
+	// chunks or make the forwarding goroutine send to a closed channel.
+	<-forwardDone
 	if runErr != nil {
 		log.Warnf("run streaming error: %v", runErr)
 	}

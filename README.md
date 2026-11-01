@@ -128,7 +128,7 @@
 *   **会话与消息持久化**：SQLite 存储 Conversation / ChatMessage，`Rounds` 字段序列化完整 LLM 消息
 *   **树形对话历史**：每条消息记录 `parent_message_id`，`buildHistory` 沿祖先链追溯重建 LLM context
 
-### 第十一章：Agent 可观测性（Observability）🚧
+### 第十一章：Agent 可观测性（Observability）
 
 **目标**：让 Agent 的每次执行都透明、可追溯，从「能用」走向「可运维」。
 
@@ -139,7 +139,7 @@
 
 ---
 
-### 第十二章：Agent 评测与自动化测试（LLM Eval）🚧
+### 第十二章：Agent 评测与自动化测试（LLM Eval）
 
 **目标**：摒弃"靠肉眼看效果"的黑盒测试，构建自动化评测流水线。
 
@@ -191,8 +191,8 @@ baby-agent/
 ├── ch08/           # ✅ 第八章：沙盒与安全防御
 ├── ch09/           # ✅ 第九章：Agent 技能插件
 ├── ch10/           # ✅ 第十章：Web 服务化与 SSE 流式传输
-├── ch11/           # 🚧 第十一章：Agent 可观测性（规划中）
-├── ch12/           # 🚧 第十二章：Agent 评测与自动化测试（规划中）
+├── ch11/           # ✅ 第十一章：Agent 可观测性
+├── ch12/           # ✅ 第十二章：Agent 评测与自动化测试
 ├── shared/         # 共享代码（配置、MCP 等）
 ├── .env            # 环境变量配置
 └── README.md       # 本文件
@@ -231,6 +231,9 @@ go run ./ch09/main
 
 # 第十章：Web 服务（监听 :8080）
 go run ./ch10/main
+
+# 第十二章：离线评测（无需 API Key）
+go run ./ch12/main
 ```
 
 第七章是独立的索引和工具实现，可参考 `ch07/README.md` 中的使用示例。

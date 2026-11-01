@@ -385,7 +385,7 @@ type VectorStore interface {
 }
 ```
 
-**索引策略**：使用 IVFFlat 索引加速向量搜索（`ch07/db/pgvector.go:100-111`）
+**索引策略**：使用 IVFFlat 索引加速向量搜索（`ch07/db/pgvector.go:100-111`）(HNSW索引快)
 
 ---
 

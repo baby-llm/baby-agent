@@ -19,11 +19,13 @@ export default function AssistantThread() {
     const activeThreadId = s.threads.mainThreadId
     return s.threads.threadItems.find((item) => item.id === activeThreadId)?.remoteId
   })
+  const threadStatus = useAuiState((s) => s.threadListItem.status)
   const messageCount = useAuiState((s) => s.thread.messages.length)
   const isLoading = useAuiState((s) => s.thread.isLoading)
   const isRunning = useAuiState((s) => s.thread.isRunning)
   const [hydratedRemoteId, setHydratedRemoteId] = useState<string | null>(null)
   const [hydrationError, setHydrationError] = useState<string | null>(null)
+  const [initializationError, setInitializationError] = useState<string | null>(null)
 
   const needsHydration = Boolean(
     remoteId && messageCount === 0 && hydratedRemoteId !== remoteId && !isRunning,
@@ -31,7 +33,27 @@ export default function AssistantThread() {
 
   useEffect(() => {
     setHydrationError(null)
+    setInitializationError(null)
   }, [remoteId])
+
+  // assistant-ui starts a new thread with a local-only id. If the first user
+  // message starts before its async initialization finishes, the chat adapter
+  // receives no backend conversation id and cannot issue the POST request.
+  // Initialize eagerly and only expose the composer once the remote id exists.
+  useEffect(() => {
+    if (threadStatus !== 'new') return
+
+    let cancelled = false
+    void aui.threadListItem().initialize().catch((error) => {
+      if (cancelled) return
+      console.error('Failed to initialize conversation:', error)
+      setInitializationError(error instanceof Error ? error.message : 'Unable to create conversation')
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [aui, threadStatus])
 
   useEffect(() => {
     if (!remoteId) {
@@ -86,9 +108,11 @@ export default function AssistantThread() {
               fontSize: 14,
             }}
           >
-            {hydrationError
+            {initializationError
+              ? `Failed to create conversation: ${initializationError}`
+              : hydrationError
               ? 'Failed to load conversation history.'
-              : needsHydration
+              : !remoteId || needsHydration
                 ? 'Loading conversation...'
                 : 'Start a conversation...'}
           </div>
@@ -99,7 +123,7 @@ export default function AssistantThread() {
         </ThreadPrimitive.Messages>
       </ThreadPrimitive.Viewport>
 
-      {!needsHydration && !hydrationError ? <AssistantComposer /> : null}
+      {remoteId && !needsHydration && !hydrationError && !initializationError ? <AssistantComposer /> : null}
     </ThreadPrimitive.Root>
   )
 }

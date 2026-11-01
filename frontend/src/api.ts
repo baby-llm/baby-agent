@@ -1,5 +1,3 @@
-import { fetchEventSource } from '@microsoft/fetch-event-source'
-
 export const USER_ID = 'user_001'
 const BASE = '/api'
 
@@ -139,38 +137,90 @@ export function streamThreadRun({
     callback?.()
   }
 
-  fetchEventSource(`${BASE}/conversation/${threadId}/message`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: USER_ID, query, parent_message_id: parentMessageId ?? '' }),
+  void readSSEStream({
+    threadId,
+    query,
+    parentMessageId,
     signal: ctrl.signal,
-    onmessage(ev) {
-      const event = parseSSEMessage(ev.data)
-      if (event) onEvent(event)
-    },
-    onclose() {
-      finalize(onClose)
-    },
-    onerror(err) {
-      throw err // stop retrying
-    },
-  }).catch((err) => {
-    if (isAbortError(err)) {
-      finalize()
-      return
-    }
-
-    const error = normalizeStreamError(err)
-    console.error('SSE error:', error)
-    finalize(() => {
-      onError?.(error)
-      onClose()
-    })
+    onEvent,
   })
+    .then(() => finalize(onClose))
+    .catch((err) => {
+      if (isAbortError(err)) {
+        finalize()
+        return
+      }
+
+      const error = normalizeStreamError(err)
+      console.error('SSE error:', error)
+      finalize(() => {
+        onError?.(error)
+        onClose()
+      })
+    })
 
   return () => {
     finalize()
     ctrl.abort()
+  }
+}
+
+interface ReadSSEStreamArgs {
+  threadId: string
+  query: string
+  parentMessageId?: string
+  signal: AbortSignal
+  onEvent: (event: SSEMessageVO) => void
+}
+
+// Use the platform stream reader instead of a reconnecting EventSource wrapper.
+// A chat response is one POST request: retrying it can create duplicate turns and
+// leave the assistant-ui placeholder in a permanent running state.
+async function readSSEStream({
+  threadId,
+  query,
+  parentMessageId,
+  signal,
+  onEvent,
+}: ReadSSEStreamArgs): Promise<void> {
+  const response = await fetch(`${BASE}/conversation/${threadId}/message`, {
+    method: 'POST',
+    headers: {
+      Accept: 'text/event-stream',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ user_id: USER_ID, query, parent_message_id: parentMessageId ?? '' }),
+    signal,
+  })
+
+  if (!response.ok) {
+    throw new Error(`Chat request failed (${response.status} ${response.statusText})`)
+  }
+  if (!response.body) {
+    throw new Error('Chat request returned no response stream')
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value, { stream: !done })
+
+    const events = buffer.split(/\r?\n\r?\n/)
+    buffer = events.pop() ?? ''
+    for (const rawEvent of events) {
+      const data = rawEvent
+        .split(/\r?\n/)
+        .filter((line) => line.startsWith('data:'))
+        .map((line) => line.slice(5).trimStart())
+        .join('\n')
+      const event = parseSSEMessage(data)
+      if (event) onEvent(event)
+    }
+
+    if (done) break
   }
 }
 
