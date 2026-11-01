@@ -46,6 +46,7 @@ func StreamingRequestSDK(ctx context.Context, modelConf shared.ModelConfig, quer
 	}
 
 	stream := client.Chat.Completions.NewStreaming(ctx, req)
+	defer stream.Close()
 
 	for stream.Next() {
 		chunk := stream.Current()
@@ -57,6 +58,5 @@ func StreamingRequestSDK(ctx context.Context, modelConf shared.ModelConfig, quer
 
 	if stream.Err() != nil {
 		log.Fatalf("stream error: %v", stream.Err())
-		return
 	}
 }

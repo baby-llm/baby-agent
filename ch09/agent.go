@@ -152,6 +152,9 @@ func (a *Agent) RunStreaming(ctx context.Context, query string, viewCh chan Mess
 				}
 			}
 		}
+		// 显式关闭流以释放底层 HTTP 连接。不能用 defer：stream 在 agent 主循环里每轮重建，
+		// defer 会等到函数返回才关闭，反而累积泄漏。Close 不影响后续 stream.Err() 读取。
+		stream.Close()
 		if err := stream.Err(); err != nil {
 			viewCh <- MessageVO{
 				Type:    MessageTypeError,
