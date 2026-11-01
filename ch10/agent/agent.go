@@ -109,12 +109,9 @@ func (a *Agent) RunStreaming(ctx context.Context, history []openai.ChatCompletio
 			acc.AddChunk(chunk)
 
 			if len(chunk.Choices) > 0 {
-				deltaRaw := chunk.Choices[0].Delta
-				delta := deltaWithReasoning{}
-				_ = json.Unmarshal([]byte(deltaRaw.RawJSON()), &delta)
-
-				if delta.ReasoningContent != "" {
-					eventCh <- StreamEvent{Event: EventReasoning, ReasoningContent: delta.ReasoningContent}
+				delta := chunk.Choices[0].Delta
+				if reasoningContent := reasoningText(delta); reasoningContent != "" {
+					eventCh <- StreamEvent{Event: EventReasoning, ReasoningContent: reasoningContent}
 				}
 				if delta.Content != "" {
 					eventCh <- StreamEvent{Event: EventContent, Content: delta.Content}
@@ -175,7 +172,24 @@ func (a *Agent) RunStreaming(ctx context.Context, history []openai.ChatCompletio
 	}, nil
 }
 
-type deltaWithReasoning struct {
-	Content          string `json:"content"`
-	ReasoningContent string `json:"reasoning_content"`
+// reasoningText returns reasoning content from the SDK field added by the
+// baby-llm/openai-go fork. Some providers use "reasoning" or "thinking"
+// instead of "reasoning_content"; those aliases are display-only fallbacks
+// because upstream openai-go does not model them.
+func reasoningText(delta openai.ChatCompletionChunkChoiceDelta) string {
+	if delta.ReasoningContent != "" {
+		return delta.ReasoningContent
+	}
+
+	var extra struct {
+		Reasoning string `json:"reasoning"`
+		Thinking  string `json:"thinking"`
+	}
+	if err := json.Unmarshal([]byte(delta.RawJSON()), &extra); err != nil {
+		return ""
+	}
+	if extra.Reasoning != "" {
+		return extra.Reasoning
+	}
+	return extra.Thinking
 }

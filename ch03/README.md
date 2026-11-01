@@ -54,7 +54,11 @@ OPENAI_MODEL=qwen3:8b
 - `reasoning`（例如 Ollama 的 OpenAI 兼容接口）
 - `thinking`（例如 Ollama 原生接口）
 
-`ch03/agent.go` 中的 `RunStreaming` 通过 `RawJSON()` 解析增量消息，尝试抽取 `reasoning_content`、`reasoning`、`thinking`，并将其单独作为 `MessageTypeReasoning` 发送给 TUI。这样就能把“推理过程”和“最终内容”分开显示，利于调试与对齐。
+`ch03/agent.go` 中的 `RunStreaming` 把推理内容单独作为 `MessageTypeReasoning` 发送给 TUI，这样就能把“推理过程”和“最终内容”分开显示，利于调试与对齐。
+
+> **实现状态**：`reasoning_content` 由项目使用的 baby-llm/openai-go fork 在 SDK 层原生解析（见根 README 的 SDK fork 说明）。`reasoning` / `thinking` 是部分厂商的别名字段，SDK 未建模，代码里用 `RawJSON()` 兜底解析，**仅用于展示**。
+>
+> 工具调用轮次中，SDK 的 `ChatCompletionMessage.ToParam()` 会自动把已累积的 `reasoning_content` 带回消息链，满足 DeepSeek 思考模式下“工具调用后必须回传推理内容”的要求，业务代码不需要手工拼接该字段。
 
 > 例如，本地使用 Ollama 跑 `qwen3` 时，OpenAI 兼容接口通常返回 `reasoning`；若直接调用 Ollama 原生接口，则常见字段名为 `thinking`。
 

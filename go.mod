@@ -90,3 +90,5 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.47.0 // indirect
 )
+
+replace github.com/openai/openai-go/v3 => github.com/baby-llm/openai-go/v3 v3.24.1-baby.1

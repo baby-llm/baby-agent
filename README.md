@@ -16,11 +16,13 @@
 
 ## 🏗 核心技术栈
 
-*   **Language:** Go 1.24+
+*   **Language:** Go 1.25+
 *   **LLM Concepts:** Chat Completions API, SSE 流式传输, Function Calling, ReAct Agent Loop
 *   **Advanced AI:** 上下文工程, Memory 系统, Agentic RAG, 技能系统（Skills）
 *   **System Design:** MCP 协议,  Guardrails 安全防护, Web 服务化
 *   **Engineering:** LLM 评测, 可观测性（Trace/Metrics/Log）
+
+> **SDK fork**：项目通过 `go.mod` 的 `replace` 使用 [baby-llm/openai-go](https://github.com/baby-llm/openai-go)（基于 `openai-go v3.24.0`）。该 fork 在 SDK 层原生支持 `reasoning_content`，避免在业务代码里手工拼装该字段；详见 `BABYAGENT_FORK.md`。
 
 ---
 

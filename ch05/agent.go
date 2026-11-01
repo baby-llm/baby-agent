@@ -116,14 +116,10 @@ func (a *Agent) RunStreaming(ctx context.Context, query string, viewCh chan Mess
 			acc.AddChunk(chunk)
 
 			if len(chunk.Choices) > 0 {
-				deltaRaw := chunk.Choices[0].Delta
-				// 不同厂商会把推理内容放在 reasoning_content、reasoning 或 thinking 字段里。
-				delta, err := parseDeltaWithReasoning(deltaRaw.RawJSON())
-				if err != nil {
-					log.Printf("parse delta failed, raw=%s, err=%v", deltaRaw.RawJSON(), err)
-					continue
-				}
-				if reasoningContent := delta.ReasoningText(); reasoningContent != "" {
+				delta := chunk.Choices[0].Delta
+				// reasoning_content 由 baby-llm/openai-go fork 原生解析；
+				// reasoning/thinking 是部分厂商的别名字段，仅用于展示。
+				if reasoningContent := reasoningText(delta); reasoningContent != "" {
 					viewCh <- MessageVO{
 						Type:             MessageTypeReasoning,
 						ReasoningContent: &reasoningContent,
@@ -197,26 +193,24 @@ func (a *Agent) RunStreaming(ctx context.Context, query string, viewCh chan Mess
 	return err
 }
 
-type deltaWithReasoning struct {
-	Content          string `json:"content"`
-	ReasoningContent string `json:"reasoning_content"`
-	Reasoning        string `json:"reasoning"`
-	Thinking         string `json:"thinking"`
-}
-
-func parseDeltaWithReasoning(rawJSON string) (deltaWithReasoning, error) {
-	delta := deltaWithReasoning{}
-	err := json.Unmarshal([]byte(rawJSON), &delta)
-	return delta, err
-}
-
-func (d deltaWithReasoning) ReasoningText() string {
-	switch {
-	case d.ReasoningContent != "":
-		return d.ReasoningContent
-	case d.Reasoning != "":
-		return d.Reasoning
-	default:
-		return d.Thinking
+// reasoningText returns reasoning content from the SDK field added by the
+// baby-llm/openai-go fork. Some providers use "reasoning" or "thinking"
+// instead of "reasoning_content"; those aliases are display-only fallbacks
+// because upstream openai-go does not model them.
+func reasoningText(delta openai.ChatCompletionChunkChoiceDelta) string {
+	if delta.ReasoningContent != "" {
+		return delta.ReasoningContent
 	}
+
+	var extra struct {
+		Reasoning string `json:"reasoning"`
+		Thinking  string `json:"thinking"`
+	}
+	if err := json.Unmarshal([]byte(delta.RawJSON()), &extra); err != nil {
+		return ""
+	}
+	if extra.Reasoning != "" {
+		return extra.Reasoning
+	}
+	return extra.Thinking
 }
