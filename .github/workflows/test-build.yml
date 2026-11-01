@@ -34,6 +34,12 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Test shared packages
+        run: go test -v ./shared/...
+
+      - name: Check chapter copy drift
+        run: bash scripts/check_copies.sh
+
   test-and-build:
     name: Test and Build ${{ matrix.chapter }}
     runs-on: ubuntu-latest
