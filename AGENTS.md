@@ -5,7 +5,7 @@
 This repository is a chapter-based Go tutorial for building AI agents. Each chapter is a **snapshot** of the agent at that stage; later chapters intentionally copy earlier code so a reader can study one chapter without jumping across packages.
 
 - `ch01`–`ch12`: runnable chapter implementations.
-  - ch01–ch04: `.env` configuration; ch05–ch11: `config.json` (front/back models).
+  - ch01–ch04: `.env`; ch05, ch06, ch08–ch11: `config.json` (front/back models); ch07: `CH07_*` flags/env; ch12: no configuration.
   - ch07 additionally needs PostgreSQL + pgvector and an embedding service.
   - ch10/ch11 share the React frontend in `frontend/`.
   - ch12 uses a Mock LLM and needs no API key.
@@ -21,13 +21,14 @@ Follow the existing chapter pattern (`prompt.go`, `agent.go`, `main/main.go`, op
 Use Go 1.25+. Use Node 24 + pnpm for the frontend.
 
 - `cp .env.example .env`: configuration for ch01–ch04.
-- `cp config.example.json config.json`: configuration for ch05–ch11.
+- `cp config.example.json config.json`: configuration for ch05, ch06, and ch08–ch11.
 - `go run ./ch01/main --stream -q "hello"`: run a chapter entrypoint.
 - `go test -v ./ch08/...`: run tests for one chapter.
 - `go test -v ./...`: run all tests in the module.
 - `go build -v ./ch09/main`: build a chapter binary (CI builds every chapter main).
 - `go vet ./...`: run vet (CI).
 - `gofmt -l .`: check formatting (CI); `gofmt -w <paths>` to apply.
+- `bash scripts/check_copies.sh`: verify chapter copies stayed in sync (CI).
 - `pnpm --dir frontend install && pnpm --dir frontend dev`: run the frontend.
 - `pnpm --dir frontend lint && pnpm --dir frontend build`: CI frontend checks.
 

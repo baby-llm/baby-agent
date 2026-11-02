@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -28,6 +29,7 @@ func main() {
 	log.SetOutput(io.Discard)
 	p := tea.NewProgram(tui.NewModel(agent, modelConf.Model))
 	if _, err := p.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "TUI failed: %v\n", err)
 		os.Exit(1)
 	}
 }

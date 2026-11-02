@@ -3,30 +3,28 @@ package ch02
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 
 	"github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/option"
 
 	"babyagent/ch02/tool"
 	"babyagent/shared"
 )
 
 type Agent struct {
-	systemPrompt string
-	model        string
-	client       openai.Client
-	messages     []openai.ChatCompletionMessageParamUnion
-	tools        map[tool.AgentTool]tool.Tool
+	model    string
+	client   openai.Client
+	messages []openai.ChatCompletionMessageParamUnion
+	tools    map[tool.AgentTool]tool.Tool
 }
 
 func NewAgent(modelConf shared.ModelConfig, systemPrompt string, tools []tool.Tool) *Agent {
 	a := Agent{
-		systemPrompt: systemPrompt,
-		model:        modelConf.Model,
-		client:       openai.NewClient(option.WithBaseURL(modelConf.BaseURL), option.WithAPIKey(modelConf.ApiKey)),
-		tools:        make(map[tool.AgentTool]tool.Tool),
-		messages:     make([]openai.ChatCompletionMessageParamUnion, 0),
+		model:    modelConf.Model,
+		client:   shared.NewLLMClient(modelConf),
+		tools:    make(map[tool.AgentTool]tool.Tool),
+		messages: make([]openai.ChatCompletionMessageParamUnion, 0),
 	}
 	for _, t := range tools {
 		a.tools[t.ToolName()] = t
@@ -62,8 +60,7 @@ func (a *Agent) Run(ctx context.Context, query string) (string, error) {
 		log.Printf("calling llm model %s...", a.model)
 		resp, err := a.client.Chat.Completions.New(ctx, params)
 		if err != nil {
-			log.Fatalf("failed to send a new completion request: %v", err)
-			return "", err
+			return "", fmt.Errorf("send completion request: %w", err)
 		}
 		if len(resp.Choices) == 0 {
 			log.Printf("no choices returned, resp: %v", resp)

@@ -51,6 +51,9 @@ func (p *SummaryPolicy) Apply(ctx context.Context, engine *Engine) (PolicyResult
 	}
 
 	summarizeUntilIndex := len(engine.messages) - p.KeepRecentMessages
+	if summarizeUntilIndex >= len(engine.messages) {
+		summarizeUntilIndex = len(engine.messages) - 1
+	}
 	// Never let the kept tail start with a tool result: the matching
 	// assistant(tool_calls) message would be summarized away, producing an
 	// invalid request. Move the boundary back to the assistant tool-call message.

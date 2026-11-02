@@ -33,8 +33,42 @@ func LoadSkill(id string) (Skill, error) {
 	}
 
 	workspaceDir := shared.GetWorkspaceDir()
-	skillDir := filepath.Join(workspaceDir, ".babyagent", "skills", id)
+	skillsRoot := filepath.Join(workspaceDir, ".babyagent", "skills")
+	skillDir := filepath.Join(skillsRoot, id)
 	instructionPath := filepath.Join(skillDir, "SKILL.md")
+
+	// The id regex already blocks "../", but a symlinked skill directory could
+	// still point outside the workspace. Compare the resolved paths before
+	// reading anything.
+	resolvedRoot, err := filepath.EvalSymlinks(skillsRoot)
+	if err != nil {
+		return Skill{}, fmt.Errorf("resolve skills directory: %w", err)
+	}
+	resolvedDir, err := filepath.EvalSymlinks(skillDir)
+	if err != nil {
+		return Skill{}, fmt.Errorf("resolve skill directory: %w", err)
+	}
+	rel, err := filepath.Rel(resolvedRoot, resolvedDir)
+	if err != nil {
+		return Skill{}, err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return Skill{}, fmt.Errorf("skill %q resolves outside the skills directory", id)
+	}
+
+	// SKILL.md itself may be a symlink; verify it also stays inside the
+	// resolved skill directory before reading it.
+	resolvedInstruction, err := filepath.EvalSymlinks(instructionPath)
+	if err != nil {
+		return Skill{}, fmt.Errorf("resolve skill file: %w", err)
+	}
+	relFile, err := filepath.Rel(resolvedDir, resolvedInstruction)
+	if err != nil {
+		return Skill{}, err
+	}
+	if relFile == ".." || strings.HasPrefix(relFile, ".."+string(filepath.Separator)) {
+		return Skill{}, fmt.Errorf("skill file %q resolves outside the skill directory", id)
+	}
 
 	instructionBytes, err := os.ReadFile(instructionPath)
 	if err != nil {
@@ -71,6 +105,11 @@ func LoadSkill(id string) (Skill, error) {
 
 	if fm.Description == "" {
 		return Skill{}, errors.New("skill must have a 'description' field in front matter")
+	}
+	// Descriptions are injected into the system prompt verbatim; cap them so a
+	// skill file cannot silently consume the whole context window.
+	if len([]rune(fm.Description)) > 1024 {
+		return Skill{}, errors.New("skill description must be at most 1024 characters")
 	}
 
 	scripts, err := listFiles(filepath.Join(skillDir, "scripts"), workspaceDir)

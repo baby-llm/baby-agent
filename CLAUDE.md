@@ -26,7 +26,7 @@ The official OpenAI SDK is replaced by the `baby-llm/openai-go` fork (see `go.mo
 ```bash
 # Configuration
 cp .env.example .env                  # ch01-ch04
-cp config.example.json config.json    # ch05-ch11
+cp config.example.json config.json    # ch05, ch06, ch08-ch11
 
 # Run
 go run ./ch01/main --stream -q "hello"
@@ -40,13 +40,14 @@ go run ./ch12/main                    # offline eval, no API key
 go test ./...
 go vet ./...
 gofmt -l .
+bash scripts/check_copies.sh
 pnpm --dir frontend lint && pnpm --dir frontend build
 ```
 
 ## Configuration
 
 - ch01–ch04: `.env` with `OPENAI_API_KEY`; `OPENAI_BASE_URL` / `OPENAI_MODEL` fall back to defaults when empty.
-- ch05–ch11: `config.json` with `llm_providers.front_model` and `llm_providers.back_model` (`base_url`, `api_key`, `model`, `context_window`).
+- ch05, ch06, ch08–ch11: `config.json` with `llm_providers.front_model` and `llm_providers.back_model` (`base_url`, `api_key`, `model`, `context_window`).
 - ch04+: optional `mcp-server.json`; default filesystem server needs `npx`.
 - ch07: `CH07_PG_DSN`, `CH07_EMBED_BASE_URL`, `CH07_EMBED_API_KEY`, optional rerank vars; see `ch07/README.md`.
 

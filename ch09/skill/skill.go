@@ -2,6 +2,7 @@ package skill
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,8 +56,9 @@ func (m *Manager) LoadAll() error {
 
 		skillData, err := LoadSkill(skillID)
 		if err != nil {
-			// Log but continue loading other skills
-			fmt.Printf("warning: failed to load skill %s: %v\n", skillID, err)
+			// One broken skill should not prevent the others from loading, but
+			// the warning must be visible instead of disappearing into stdout.
+			log.Printf("failed to load skill %s: %v", skillID, err)
 			continue
 		}
 

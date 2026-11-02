@@ -56,7 +56,10 @@ func main() {
 	homeStorage := storage.NewFileSystemStorage(filepath.Join(shared.GetHomeDir(), ".babyagent"))
 	workspaceStorage := storage.NewFileSystemStorage(filepath.Join(shared.GetWorkspaceDir(), ".babyagent"))
 	memoryUpdater := memory.NewLLMMemoryUpdater(appConf.LLMProviders.BackModel)
-	multiLevelMemory := memory.NewMultiLevelMemory(homeStorage, workspaceStorage, memoryUpdater)
+	multiLevelMemory, err := memory.NewMultiLevelMemory(homeStorage, workspaceStorage, memoryUpdater)
+	if err != nil {
+		log.Fatalf("Failed to load memory: %v", err)
+	}
 
 	contextEngine := ctxengine.NewContextEngine(multiLevelMemory, policies)
 

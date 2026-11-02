@@ -10,17 +10,47 @@
 
 ---
 
-## 🎯 你将学到什么
+## 🎯 本章目标
 
 1. **Docker 沙盒隔离**：在容器中运行 bash 命令，保障本地环境安全
 2. **智能工具选择**：自动检测 Docker 可用性，优雅降级到普通 bash
 3. **人工确认（Human-in-the-loop）**：在执行危险命令前请求用户确认
 4. **确认状态管理**：Allow/Reject/Always Allow 三种确认选项
-5. **Context 取消机制**：用户按 ESC 提前终止 Agent Loop
+5. **上下文取消机制**：用户按 ESC 提前终止 Agent Loop
 
 ---
 
-## 🛠 核心功能
+## 🛠 准备工作
+
+需要 Go 1.25+ 和根目录 `config.json`（与 ch06 相同）：
+
+```bash
+cp config.example.json config.json
+# 填入 llm_providers.front_model / back_model 的 api_key
+```
+
+`mcp-server.json` 可选（默认 filesystem server 需要 `npx`）。Docker 也可选：可用时 bash 在 `alpine:3.19` 容器中执行；不可用时自动降级到宿主机 `bash`，并在启动时打印警告。
+
+---
+
+## 📌 相对上一章的变化
+
+在 ch06 的上下文/记忆 Agent 上新增 Docker 沙盒、工具工厂、HITL 确认状态机和 ESC 取消。`read` / `write` / `edit` 尚未接入，本章的确认规则只覆盖 `bash`。
+
+---
+
+### 与 ch06 的复制差异
+
+| 文件 | 差异 |
+|---|---|
+| `context/engine.go` | 增加 `skipPoliciesAndMemory`（ESC 取消时只保存消息） |
+| `tool/docker_bash.go` / `factory.go` | 本章新增 |
+| `agent.go` / `tui/` / `main` | 增加确认状态机、Docker 降级提示 |
+| `memory/` / `storage/` / `tool/bash.go` | 与 ch06 保持同步，修复需同步 |
+
+---
+
+## 📖 核心原理解析
 
 ### 1. Docker 沙盒隔离
 
@@ -80,7 +110,7 @@
 ```
 ┌─────────────────────────────────────────┐
 │ 工具确认                                 │
-│ bash(cowsay "Hello")                    │
+│ bash(echo "Hello")                    │
 │                                         │
 │   ┌─────────────────────────┐           │
 │   │   ▶ 允许                │           │
@@ -94,7 +124,7 @@
 
 **三种确认选项**：
 - **允许**：执行本次工具调用
-- **拒绝**：拒绝本次调用，终止 Agent Loop
+- **拒绝**：拒绝本次调用，把 `user rejected tool call` 回填给模型，继续 loop
 - **始终允许**：执行并记录，当前会话同类工具不再确认
 
 ---
@@ -110,7 +140,7 @@
 
 ---
 
-## 📖 代码结构速览
+## 💻 代码结构速览
 
 ### Agent (`ch08/agent.go`)
 - `ToolConfirmConfig`：工具确认配置
@@ -139,9 +169,11 @@
 - `selectedConfirmIdx`：当前选中的选项索引
 - `renderConfirmBox()`：渲染确认框 UI
 
+> **容器名说明**：实际容器名由 `generateContainerName` 生成，格式为 `babyagent-sandbox-<项目名>-<hash>`；下文的 `babyagent-sandbox` 只是简写。
+
 ---
 
-## 💡 使用示例
+## 🚀 动手运行
 
 ### 运行 TUI
 
@@ -177,7 +209,7 @@ Agent: 准备调用 bash 工具
 [确认框弹出]
   ┌─────────────────────────────────┐
   │ 工具确认                         │
-  │ bash(cowsay "Hello")            │
+  │ bash(echo "Hello")            │
   │                                 │
   │   ▶ 允许                         │
   │     拒绝                         │
@@ -188,7 +220,7 @@ Agent: 准备调用 bash 工具
 [用户按 ↓ 选择"始终允许"，Enter 确认]
 
 Agent: [在容器中执行命令]
-      docker exec babyagent-sandbox sh -c "cowsay Hello"
+      docker exec babyagent-sandbox sh -c "echo Hello"
 
 输出: ____
        / Hello \
@@ -221,7 +253,7 @@ Agent: 准备调用 bash
 
 ### 工具确认配置
 
-在 `ch08/tui/main.go` 中配置需要确认的工具：
+在 `ch08/main/main.go` 中配置需要确认的工具：
 
 - `tool.AgentToolBash`：bash 命令需要确认
 - `tool.AgentToolWrite`：写文件需要确认
@@ -254,7 +286,22 @@ MCP 工具使用完整工具名（如 `babyagent_mcp__filesystem__write_file`）
 
 ---
 
-## 📚 延伸阅读
+## 🚫 故意不实现
+
+- 不做 Skills（ch09）。
+- RAG 未集成进本章 Agent（ch07 是独立分支）。
+- Docker 不可用时没有强隔离，只是降级到宿主机 bash。
+- 确认规则只覆盖 `bash`，`read` / `write` / `edit` 尚未接入。
+
+---
+
+## ➡️ 下一章
+
+ch09 在同样的沙盒/HITL Agent 上加入 Skills 渐进加载与 `load_skill`。
+
+---
+
+## 📚 扩展阅读与参考资料
 
 ### 功能扩展方向
 

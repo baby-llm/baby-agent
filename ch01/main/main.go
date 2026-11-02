@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
+	"os"
 
 	"github.com/joho/godotenv"
 
@@ -23,14 +25,19 @@ func main() {
 
 	modelConf := shared.NewModelConfig()
 
+	var err error
 	switch {
 	case *useRaw && *useStream:
-		ch01.StreamingRequestRawHTTP(ctx, modelConf, *query)
+		err = ch01.StreamingRequestRawHTTP(ctx, modelConf, *query)
 	case *useRaw:
-		ch01.NonStreamingRequestRawHTTP(ctx, modelConf, *query)
+		err = ch01.NonStreamingRequestRawHTTP(ctx, modelConf, *query)
 	case *useStream:
-		ch01.StreamingRequestSDK(ctx, modelConf, *query)
+		err = ch01.StreamingRequestSDK(ctx, modelConf, *query)
 	default:
-		ch01.NonStreamingRequestSDK(ctx, modelConf, *query)
+		err = ch01.NonStreamingRequestSDK(ctx, modelConf, *query)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "request failed:", err)
+		os.Exit(1)
 	}
 }

@@ -47,8 +47,8 @@ type DockerBashTool struct {
 	image         string
 	workspaceDir  string
 
-	once     sync.Once
-	startErr error
+	mu      sync.Mutex
+	started bool
 }
 
 func NewDockerBashTool(containerName, workspaceDir string) *DockerBashTool {
@@ -84,12 +84,10 @@ func (t *DockerBashTool) Info() openai.ChatCompletionToolUnionParam {
 }
 
 func (t *DockerBashTool) Execute(ctx context.Context, argumentsInJSON string) (string, error) {
-	// Lazy initialization: start container on first use
-	t.once.Do(func() {
-		t.startErr = t.ensureSandboxContainer(ctx)
-	})
-	if t.startErr != nil {
-		return "", fmt.Errorf("failed to start sandbox container: %w", t.startErr)
+	// Lazy initialization: start the container on first use. Only a success
+	// is cached, so a transient failure (image pull timeout, ESC) can retry.
+	if err := t.ensureStarted(ctx); err != nil {
+		return "", fmt.Errorf("failed to start sandbox container: %w", err)
 	}
 
 	p := BashToolParam{}
@@ -108,6 +106,19 @@ func (t *DockerBashTool) Execute(ctx context.Context, argumentsInJSON string) (s
 		return string(output), fmt.Errorf("docker exec failed: %w", err)
 	}
 	return string(output), nil
+}
+
+func (t *DockerBashTool) ensureStarted(ctx context.Context) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.started {
+		return nil
+	}
+	if err := t.ensureSandboxContainer(ctx); err != nil {
+		return err
+	}
+	t.started = true
+	return nil
 }
 
 func (t *DockerBashTool) ensureSandboxContainer(ctx context.Context) error {

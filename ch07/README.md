@@ -18,7 +18,7 @@
 
 ---
 
-## 🎯 你将学到什么
+## 🎯 本章目标
 
 1. **Agentic RAG 概念**：理解 Agent 如何自主决策检索时机、查询内容和数量
 2. **文本切分（Chunking）**：如何将长文档切分为适合检索的块
@@ -48,34 +48,9 @@
 
 相关代码：`ch07/rag/embedding.go`、`ch07/rag/rerank.go`。
 
-### 运行本章
+## 📌 相对上一章的变化
 
-本章提供一个可运行的 CLI，索引和检索可以分开执行：
-
-```bash
-# 1) 索引一个目录（示例：当前仓库）
-export CH07_PG_DSN="host=localhost port=5432 user=postgres password=postgres dbname=babyagent sslmode=disable"
-export CH07_EMBED_BASE_URL="https://api.openai.com/v1"
-export CH07_EMBED_API_KEY="$OPENAI_API_KEY"
-
-go run ./ch07/main -index . -dimensions 1536 -chunker line
-
-# 2) 语义搜索
-go run ./ch07/main -q "Agent 如何管理上下文" -top-k 5
-
-# 3) 可选：开启 rerank
-go run ./ch07/main -q "Agent 如何管理上下文" \
-  -rerank-base-url "https://your-rerank-endpoint" \
-  -rerank-api-key "$CH07_RERANK_API_KEY"
-```
-
-也可以直接用 flag 传参：`-dsn`、`-embed-base-url`、`-embed-api-key`、`-dimensions`、`-chunker`、`-max-lines`、`-max-chars`、`-concurrency`。
-
-> **注意**
-> - `-dimensions` 必须和 Embedding 模型输出维度一致（例如 `text-embedding-3-small` 是 1536，本章默认配置是 512）。维度改变后需要先 `DROP TABLE document_chunks`，否则 `initTable` 会直接报维度不匹配。
-> - 建表时会自动执行 `CREATE EXTENSION IF NOT EXISTS vector`；数据库账号需要有安装扩展的权限，或者提前由 DBA 安装好 pgvector。
-> - 索引器默认跳过 `.env`、`config*.json`、`*.pem`/`*.key`、`.babyagent/` 等敏感或本地目录；这不是安全边界，索引前仍应确认工作区内容。
-> - 本章代码已实现：Line/Paragraph 切分、HTTP Embedding/Rerank、pgvector 存储、增量索引、Semantic Search CLI。AST 切分、全文搜索、混合搜索是扩展设计，尚未实现。
+本章是**可选的独立分支**，不接 Agent / TUI：提供索引与搜索 CLI（`ch07/main`），新增 Line/Paragraph 切分、HTTP Embedding、pgvector 存储、Rerank、Semantic Search Tool。它从 ch06 的能力面出发，但不修改 ch06 的 Agent；ch08 会回到 ch06 基线继续讲安全。
 
 ---
 
@@ -385,7 +360,7 @@ type EmbeddingService interface {
 
 **向量维度**：
 - OpenAI `text-embedding-3-small`: 1536 维
-- 本章默认配置：512 维（可通过 `HTTPEmbeddingConfig` 配置）
+- 本章默认配置：1536 维（`rag.DefaultDimensions`，可通过 `HTTPEmbeddingConfig` 或命令行参数覆盖）
 
 **相似度计算**：
 - 余弦相似度（Cosine Similarity）：最常用
@@ -415,6 +390,7 @@ type EmbeddingService interface {
 ```go
 type VectorStore interface {
     InsertBatch(ctx context.Context, vps []VectorPoint) error
+    ReplaceDocument(ctx context.Context, documentID string, vps []VectorPoint) error
     Search(ctx context.Context, queryVector Vector, limit int) ([]VectorPointResult, error)
     DeleteByDocument(ctx context.Context, documentID string) error
     GetDocumentIndexedTime(ctx context.Context, documentID string) (time.Time, error)
@@ -423,7 +399,7 @@ type VectorStore interface {
 }
 ```
 
-**索引策略**：使用 IVFFlat 索引加速向量搜索（`ch07/db/pgvector.go:100-111`）(HNSW索引快)
+**索引策略**：使用 IVFFlat 索引加速向量搜索（`ch07/db/pgvector.go` 的 `initTable`；示例使用 IVFFlat，HNSW 是可选替换）
 
 ---
 
@@ -566,17 +542,12 @@ indexerConfig := index.IndexerConfig{
 indexer := index.NewIndexer(indexerConfig, store, embedService)
 ```
 
-**接入 Agent**：`SemanticSearchTool` 实现了与 ch06/ch09 相同的 `ToolName / Info / Execute` 方法集，可以直接追加到 Agent 的工具列表：
+**接入 Agent**：`SemanticSearchTool` 实现了本章 `tool.Tool` 的 `ToolName / Info / Execute` 方法集。章节之间不能互相 import；如果要在 ch06/ch09 的 Agent 中使用它，需要把 `semantic_search.go` 及其依赖的 `rag` 类型一起复制到目标章，并把 import 路径改成该章自己的包；直接跨章 import 会破坏章节独立性。
 
 ```go
-searchTool := ch07tool.NewSemanticSearchTool(embedService, store, nil)
-
-tools := []ch06tool.Tool{
-    ch06tool.NewReadTool(),
-    ch06tool.CreateBashTool(shared.GetWorkspaceDir()),
-    ch06tool.NewLoadStorageTool(memoryStorage),
-}
-tools = append(tools, searchTool) // 方法集一致，可直接追加
+// 示意：本章内部的工具列表
+searchTool := tool.NewSemanticSearchTool(embedService, store, nil)
+tools := []tool.Tool{searchTool}
 ```
 
 这样模型会在需要查代码/文档时自主调用 `semantic_search`，而不是由外层代码硬编码检索时机。
@@ -653,6 +624,39 @@ result, err := indexer.IndexConcurrent(ctx, 10)
 ### Tool 包（`ch07/tool/`）
 - `tool.go`：工具接口定义（`Tool`、工具类型枚举）
 - `semantic_search.go`：语义搜索工具（`SemanticSearchTool`）
+
+---
+
+## 🚀 动手运行
+
+本章提供一个可运行的 CLI，索引和检索可以分开执行：
+
+```bash
+# 1) 索引一个目录（示例：当前仓库）
+export CH07_PG_DSN="host=localhost port=5432 user=postgres password=postgres dbname=babyagent sslmode=disable"
+export CH07_EMBED_BASE_URL="https://api.openai.com/v1"
+export CH07_EMBED_API_KEY="$OPENAI_API_KEY"
+
+go run ./ch07/main -index . -dimensions 1536 -chunker line
+
+# 2) 语义搜索
+go run ./ch07/main -q "Agent 如何管理上下文" -top-k 5
+
+# 3) 可选：开启 rerank
+go run ./ch07/main -q "Agent 如何管理上下文" \
+  -rerank-base-url "https://your-rerank-endpoint" \
+  -rerank-api-key "$CH07_RERANK_API_KEY"
+```
+
+也可以直接用 flag 传参：`-dsn`、`-embed-base-url`、`-embed-api-key`、`-dimensions`、`-chunker`、`-max-lines`、`-max-chars`、`-concurrency`。
+
+> **注意**
+> - `-dimensions` 必须和 Embedding 模型输出维度一致（例如 `text-embedding-3-small` 是 1536，本章默认也是 1536；可用 `-dimensions` 或 `CH07_EMBED_DIMENSIONS` 修改）。维度改变后需要先 `DROP TABLE document_chunks`，否则 `initTable` 会直接报维度不匹配。
+> - 建表时会自动执行 `CREATE EXTENSION IF NOT EXISTS vector`；数据库账号需要有安装扩展的权限，或者提前由 DBA 安装好 pgvector。
+> - 索引器默认跳过 `.env`、`config*.json`、`*.pem`/`*.key`、`.babyagent/` 等敏感或本地目录；这不是安全边界，索引前仍应确认工作区内容。
+> - 本章代码已实现：Line/Paragraph 切分、HTTP Embedding/Rerank、pgvector 存储、增量索引、Semantic Search CLI。AST 切分、全文搜索、混合搜索是扩展设计，尚未实现。
+
+
 
 ---
 
@@ -934,6 +938,20 @@ RAG 最初是对**小上下文窗口的补偿方案**。上下文窗口越大，
 5. **索引更新**：代码更新后需要重新索引，可以设置定时任务或 git hook
 6. **数据库维护**：定期 VACUUM 和 REINDEX 保持性能
 7. **策略必须先评测再上线**：切分、召回、重排、索引等策略都要先经可复现实验验证（效果与成本），不能仅凭人工判断当作优化直接上线
+
+---
+
+## 🚫 故意不实现
+
+- 本章不接入 Agent / TUI，只提供索引与搜索 CLI。
+- 不做定时索引、增量调度或多租户。
+- README 里“把 semantic_search 注册进 Agent”的示例是接口示意，不是可直接编译的跨章 import。
+
+---
+
+## ➡️ 下一章
+
+ch08 回到 ch06 的基线，讲 Docker 沙盒与 Human-in-the-loop 确认。
 
 ---
 

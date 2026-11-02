@@ -25,7 +25,7 @@
 
 ---
 
-## 🎯 你将学到什么
+## 🎯 本章目标
 
 1. **为什么 Agent 的通用指标需要特殊对待**：Duration 动辄数十秒，颠覆了传统后端的 QPS/并发/Duration 换算直觉
 2. **Agent 专属指标**：First Token Time、Tokens Per Second、Token Usage 的定义、采集方式与典型基线
@@ -34,25 +34,22 @@
 
 ---
 
-## 🚀 运行本章
+## 🛠 准备工作
+
+需要 Go 1.25+ 和根目录 `config.json`：
 
 ```bash
-# ch11 复用 ch05+ 的配置
 cp config.example.json config.json
-
-# 启动服务，默认监听 :8080
-go run ./ch11/main
-
-# Prometheus 指标
-curl localhost:8080/metrics
-
-# 发送一轮对话后，用返回的 trace_id 查询执行轨迹
-curl localhost:8080/api/trace/<trace_id>
+# 填入 llm_providers.front_model.api_key
 ```
 
-- 可选：`export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` 将 span 导出到 Jaeger/Tempo；不设置时仍会记录本地 `AgentTrace` 表与 Prometheus 指标。
-- ch10 与 ch11 默认都监听 `:8080`，二选一运行，或修改 `ch11/main/main.go` 的监听地址。
-- 前端复用 ch10 的 `frontend/`，Vite 代理仍指向 `localhost:8080`；ch11 增加了 trace 查询接口，但当前 UI 尚未展示 trace 面板（可作为扩展练习）。
+Jaeger / Tempo / Grafana 都是可选的；不设置 `OTEL_EXPORTER_OTLP_ENDPOINT` 时 span 只在进程内，`/metrics` 仍然可用。
+
+---
+
+## 📌 相对上一章的变化
+
+在 ch10 的服务上新增 `observe` 包：OTel span、Prometheus 指标、`AgentTrace` 事件，`/metrics` 与 `/api/trace/:id`，并在 SSE 消息中带上 `trace_id`。会话、消息、树形历史和前端与 ch10 保持一致。
 
 ---
 
@@ -393,6 +390,8 @@ Agent 执行轨迹要回答的核心问题是：**这次请求里 Agent 做了�
 
 ### 轨迹事件类型
 
+> **实现状态**：当前代码只发出 `query_start`、`llm_thinking`、`tool_call`、`query_end` 四类事件。下表里的 `context_build`、`context_policy`、`memory_update` 是设计扩展：ch11 的 Agent 不包含上下文策略与记忆模块，接入 ch05/ch06 后才会产生。
+
 | 事件类型 | 触发时机 | 核心记录内容 |
 |---------|---------|------------|
 | `query_start` | 收到用户请求 | 请求摘要、conversation_id、历史轮次数 |
@@ -648,7 +647,30 @@ First Token Time P95 从 1.2s 上升到 8s，但工具调用耗时没变。
 
 ---
 
-## 📖 代码结构
+## 🚀 动手运行
+
+```bash
+# ch11 复用 ch05+ 的 config.json 格式
+cp config.example.json config.json
+
+# 启动服务，默认监听 :8080
+go run ./ch11/main
+
+# Prometheus 指标
+curl localhost:8080/metrics
+
+# 发送一轮对话后，用返回的 trace_id 查询执行轨迹
+curl localhost:8080/api/trace/<trace_id>
+```
+
+- 可选：`export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` 将 span 导出到 Jaeger/Tempo；不设置时仍会记录本地 `AgentTrace` 表与 Prometheus 指标。
+- ch10 与 ch11 默认都监听 `:8080`，二选一运行，或修改 `ch11/main/main.go` 的监听地址。
+- 前端复用 ch10 的 `frontend/`，Vite 代理仍指向 `localhost:8080`；ch11 增加了 trace 查询接口，但当前 UI 尚未展示 trace 面板（可作为扩展练习）。
+
+
+---
+
+## 💻 代码结构速览
 
 ```
 ch11/
@@ -696,7 +718,21 @@ ch12  评测（离线质量保障，使用轨迹数据构建测试集）
 
 ---
 
-## 📚 扩展阅读
+## 🚫 故意不实现
+
+- 前端尚未展示 trace 面板；`trace_id` 已随 SSE 返回，可作为扩展练习。
+- 不做日志聚合、告警规则或采样策略。
+- Prometheus 指标保持低基数，工具名未知时归到 `unknown`。
+
+---
+
+## ➡️ 下一章
+
+ch12 用 Mock LLM 做离线评测；它不复用本章的 trace 数据，而是聚焦可重复的调度逻辑验证。
+
+---
+
+## 📚 扩展阅读与参考资料
 
 ### 可观测性基础
 

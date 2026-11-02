@@ -6,7 +6,9 @@
       "query": "Say hello",
       "expected_contains": ["hello"],
       "max_loop_depth": 1,
-      "mock_responses": [{"content": "Hello from BabyAgent."}]
+      "mock_responses": [
+        {"content": "Hello from BabyAgent.", "usage": {"prompt_tokens": 20, "completion_tokens": 6}}
+      ]
     },
     {
       "id": "tool-loop",
@@ -15,8 +17,8 @@
       "expected_tools": ["read"],
       "max_loop_depth": 2,
       "mock_responses": [
-        {"tool_calls": [{"id": "call-read", "name": "read", "arguments": "README.md"}]},
-        {"content": "The README describes BabyAgent."}
+        {"tool_calls": [{"id": "call-read", "name": "read", "arguments": "README.md"}], "usage": {"prompt_tokens": 30, "completion_tokens": 10}},
+        {"content": "The README describes BabyAgent.", "usage": {"prompt_tokens": 40, "completion_tokens": 8}}
       ]
     }
   ]

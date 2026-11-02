@@ -39,7 +39,6 @@ The SSE stream emits JSON `data:` frames with `event` set to `content`, `reasoni
 - `src/api.ts` — HTTP + SSE client, conversation/message types.
 - `src/App.tsx` — assistant-ui runtime wiring.
 - `src/components/assistant-ui/` — thread, message, composer, reasoning panel, tool-call card, model adapter.
-- `src/lib/assistant-ui/message-mapper.ts` — converts persisted backend messages into assistant-ui parts.
 
 ## Known limitations
 

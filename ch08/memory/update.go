@@ -32,16 +32,39 @@ func (u *LLMMemoryUpdater) Update(ctx context.Context, oldMemory MemoryContent, 
 		return oldMemory, nil
 	}
 
+	// 记忆更新只需要“这轮发生了什么”。给输入一个上限，避免把整份文件或
+	// 很长的命令输出原样塞给 back model，导致请求超长、整轮记忆更新失败。
+	const maxInputChars = 8000
 	var b strings.Builder
 	for _, msg := range newMessages {
+		if b.Len() >= maxInputChars {
+			b.WriteString("... (truncated)\n")
+			break
+		}
 
-		contentAny := msg.GetContent().AsAny()
-		contentStr, ok := contentAny.(*string)
+		role := shared.GetRoleName(msg)
+		if msg.OfAssistant != nil && len(msg.OfAssistant.ToolCalls) > 0 {
+			// Assistant 发起工具调用时 content 通常为空，工具名和参数才是
+			// 这一轮的关键信息。
+			for _, call := range msg.OfAssistant.ToolCalls {
+				if call.OfFunction == nil {
+					continue
+				}
+				b.WriteString("assistant tool_call: ")
+				b.WriteString(call.OfFunction.Function.Name)
+				b.WriteString("(")
+				b.WriteString(call.OfFunction.Function.Arguments)
+				b.WriteString(")\n")
+			}
+			continue
+		}
+
+		contentStr, ok := msg.GetContent().AsAny().(*string)
 		if !ok {
 			continue
 		}
 
-		b.WriteString(shared.GetRoleName(msg))
+		b.WriteString(role)
 		b.WriteString(": ")
 		b.WriteString(*contentStr)
 		b.WriteString("\n")
@@ -69,22 +92,33 @@ func (u *LLMMemoryUpdater) Update(ctx context.Context, oldMemory MemoryContent, 
 	}
 
 	respContent := resp.Choices[0].Message.Content
-	newMemory := MemoryContent{}
-	newMemory.GlobalMemory = extractXMLTag(respContent, "global")
-	newMemory.WorkspaceMemory = extractXMLTag(respContent, "workspace")
-
-	return newMemory, nil
+	return mergeMemory(oldMemory, respContent), nil
 }
 
-// extractXMLTag 使用正则表达式从文本中提取 XML 标签的内容
-func extractXMLTag(content, tagName string) string {
+// mergeMemory 只更新 LLM 实际返回的层级。模型漏掉某个标签或返回了
+// 不符合格式的内容时，保留旧值，避免一次解析失败把整层记忆清空。
+// 显式返回空标签（如 <global></global>）表示清空该层。
+func mergeMemory(oldMemory MemoryContent, content string) MemoryContent {
+	merged := oldMemory
+	if value, ok := extractXMLTag(content, "global"); ok {
+		merged.GlobalMemory = value
+	}
+	if value, ok := extractXMLTag(content, "workspace"); ok {
+		merged.WorkspaceMemory = value
+	}
+	return merged
+}
+
+// extractXMLTag 使用正则表达式从文本中提取 XML 标签的内容。
+// 第二个返回值表示标签是否存在，用于区分“没有返回”和“显式清空”。
+func extractXMLTag(content, tagName string) (string, bool) {
 	// 匹配 <tagName>...</tagName>，支持多行内容
 	pattern := regexp.MustCompile(`<` + regexp.QuoteMeta(tagName) + `>([\s\S]*?)</` + regexp.QuoteMeta(tagName) + `>`)
 	matches := pattern.FindStringSubmatch(content)
 	if len(matches) < 2 {
-		return ""
+		return "", false
 	}
-	return strings.TrimSpace(matches[1])
+	return strings.TrimSpace(matches[1]), true
 }
 
 const updateMemoryPrompt = `You are a memory management system for an AI coding assistant. Your task is to analyze conversation messages and update two levels of memory.

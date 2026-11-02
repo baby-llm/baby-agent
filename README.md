@@ -22,7 +22,7 @@
 *   **System Design:** MCP 协议,  Guardrails 安全防护, Web 服务化
 *   **Engineering:** LLM 评测, 可观测性（Trace/Metrics/Log）
 
-> **SDK fork**：项目通过 `go.mod` 的 `replace` 使用 [baby-llm/openai-go](https://github.com/baby-llm/openai-go)（基于 `openai-go v3.24.0`）。该 fork 在 SDK 层原生支持 `reasoning_content`，避免在业务代码里手工拼装该字段；详见 `BABYAGENT_FORK.md`。
+> **SDK fork**：项目通过 `go.mod` 的 `replace` 使用 [baby-llm/openai-go](https://github.com/baby-llm/openai-go)（基于 `openai-go v3.24.0`）。该 fork 在 SDK 层原生支持 `reasoning_content`，避免在业务代码里手工拼装该字段；`go.mod` 中的 `replace` 与 `shared/client.go` 就是全部接入点。
 
 ---
 
@@ -90,7 +90,9 @@
 *   **记忆事件系统**：在 TUI 中实时展示记忆更新状态
 *   **System Prompt 集成**：将记忆注入到 System Prompt 中供 LLM 使用
 
-### 第七章：Agentic RAG（检索增强生成）
+### 第七章：Agentic RAG（检索增强生成，可选分支）
+
+> **学习路径说明**：ch07 是可选的独立分支，从 ch06 的能力面出发，专注 RAG；ch08 回到 ch06 的基线继续讲安全防御。你可以按顺序学，也可以先跳过 ch07。
 
 **目标**：让 Agent 能够自主决策检索时机、查询内容和数量，实现真正的 Agentic RAG。
 
@@ -172,11 +174,12 @@ ch01–ch12 均已有可运行代码。额外前置条件：
     cp .env.example .env
     # 编辑 .env，填入 OPENAI_API_KEY；BASE_URL / MODEL 留空会使用默认值
 
-    # ch05-ch11：前台模型 + 后台模型（摘要 / 记忆更新）
+    # ch05、ch06、ch08–ch11：前台模型 + 后台模型（摘要 / 记忆更新）
     cp config.example.json config.json
     # 编辑 config.json，填入 front_model 与 back_model
     # config.json 已被 .gitignore 忽略，不会提交
     ```
+    **例外**：ch07 不使用 `config.json`，通过 `CH07_*` 环境变量或命令行参数配置（见 `ch07/README.md`）；ch12 使用 Mock LLM，不需要任何配置。
 4.  **MCP（可选，ch04 起）:** 按需修改根目录 `mcp-server.json`；默认配置需要本地有 `npx`。
 5.  **RAG（可选，ch07）:** 需要 PostgreSQL + pgvector，以及 Embedding / Rerank 服务，详见 `ch07/README.md`。
 
@@ -194,14 +197,14 @@ ch01–ch12 均已有可运行代码。额外前置条件：
 ## 📂 项目结构说明
 
 ```
-baby-agent/
+ai-agent-tutorials/   # Go module：babyagent
 ├── ch01/           # ✅ 第一章：初识 LLM（Raw HTTP 与 SDK）
 ├── ch02/           # ✅ 第二章：Function Calling 与 Agent Loop
 ├── ch03/           # ✅ 第三章：推理展示与 TUI 可视化
 ├── ch04/           # ✅ 第四章：MCP 生态接入
 ├── ch05/           # ✅ 第五章：上下文工程
 ├── ch06/           # ✅ 第六章：记忆机制
-├── ch07/           # ✅ 第七章：Agentic RAG
+├── ch07/           # ✅ 第七章：Agentic RAG（可选分支）
 ├── ch08/           # ✅ 第八章：沙盒与安全防御
 ├── ch09/           # ✅ 第九章：Agent 技能插件
 ├── ch10/           # ✅ 第十章：Web 服务化与 SSE 流式传输
@@ -260,9 +263,9 @@ go run ./ch12/main
 
 ## 📚 学习建议
 
-1.  **循序渐进**：按章节顺序学习，每章建立在前一章的基础上
+1.  **循序渐进**：按章节顺序学习，每章建立在前一章的基础上；ch07 是可选分支，可以学完 ch06 后直接进入 ch08
 2.  **动手实践**：运行每个章节的示例代码，观察实际效果
-3.  **可选内容**：标记"（可选阅读/可选阅读）"的小节是进阶内容，初学可跳过
+3.  **可选内容**：标记“（可选阅读）”的小节是进阶内容，初学可跳过
 4.  **原理理解**：理解 Chat Template、Token 机制、MCP 协议等底层原理有助于排查问题
 
 ---

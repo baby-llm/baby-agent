@@ -36,7 +36,7 @@ func NewAgent(modelConf shared.ModelConfig, systemPrompt string, tools []tool.To
 }
 
 func (a *Agent) execute(ctx context.Context, toolName string, argumentsInJSON string) (string, error) {
-	t, ok := a.tools[toolName]
+	t, ok := a.tools[tool.AgentTool(toolName)]
 	if ok {
 		return t.Execute(ctx, argumentsInJSON)
 	}
@@ -55,7 +55,7 @@ func (a *Agent) ResetSession() {
 	a.messages = []openai.ChatCompletionMessageParamUnion{openai.SystemMessage(a.systemPrompt)}
 }
 
-// RunStreaming 和 Run 基本逻辑一致，但是使用流式请求，并且通过 channel 实现流式输出
+// RunStreaming 是本章的 agent loop：使用流式请求，并通过 channel 把增量事件交给 UI。
 func (a *Agent) RunStreaming(ctx context.Context, query string, viewCh chan MessageVO) error {
 	// 为本轮次创建新的消息链。这样如果流式过程中失败或者终止了，不会污染历史上下文。
 	messages := make([]openai.ChatCompletionMessageParamUnion, 0, len(a.messages))

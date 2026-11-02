@@ -14,7 +14,7 @@
 
 ---
 
-## 🎯 你将学到什么
+## 🎯 本章目标
 
 1. **Agent 服务化**：如何把 CLI Agent 剥离 TUI，封装为 HTTP 服务
 2. **SSE 流式传输**：Server-Sent Events 的服务端实现，以及前后端协议设计
@@ -23,7 +23,31 @@
 
 ---
 
-## 🛠 核心功能
+## 🛠 准备工作
+
+需要 Go 1.25+ 和根目录 `config.json`（服务端只读取 `front_model`）：
+
+```bash
+cp config.example.json config.json
+# 填入 llm_providers.front_model.api_key
+```
+
+前端需要 Node 24 + pnpm：
+
+```bash
+pnpm --dir frontend install
+pnpm --dir frontend dev
+```
+
+---
+
+## 📌 相对上一章的变化
+
+本章从 ch09 回退到 ch06 的能力面（没有 context / memory / skills / RAG），新增 HTTP + SSE、SQLite 会话与消息、树形历史，以及 `frontend/` 的 assistant-ui 客户端。重点从“单机 CLI”切换到“服务端 + 浏览器”。
+
+---
+
+## 📖 核心原理解析
 
 ### 1. Agent 与传输层解耦
 
@@ -126,7 +150,7 @@ for e := range eventCh {
 
 ---
 
-## 📖 代码结构速览
+## 💻 代码结构速览
 
 ```
 ch10/
@@ -173,12 +197,11 @@ type ChatMessage struct {
 
 ---
 
-## 💡 使用示例
+## 🚀 动手运行
 
 ### 运行服务
 
 ```bash
-cp .env.example .env
 cp config.example.json config.json
 # 编辑 config.json，填入 LLM 配置
 
@@ -271,6 +294,27 @@ server: {
 
 ## 与前几章的关系
 
-ch10 在 ch09 Agent 能力的基础上，专注解决**服务化**这一工程问题。为保持代码清晰，ch10 有意简化了 Agent（去掉了 TUI、上下文管理、记忆、RAG、技能等高级特性），只保留最核心的 Agent Loop + bash 工具。
+ch10 从 ch09 的能力面**回退**到“核心 Agent Loop + bash 工具”，把注意力集中在服务化这一工程问题：去掉 TUI、上下文管理、记忆、RAG 与技能，不代表它们没有价值，而是让 HTTP / SSE / 持久化这条链路更容易看清。需要这些能力时，可以回到对应章节，或按同样的 `Agent` 接口把它们接回来。
 
-后续章节将在 ch10 的服务化基础上，逐步叠加状态管理、评测等能力。
+---
+
+## 🚫 故意不实现
+
+- 不做鉴权、多租户与限流。
+- 不做可观测性（ch11）。
+- 不做上下文压缩、记忆、RAG、Skills。
+- SSE 没有断线重连与消息去重；一次请求就是一条完整的流。
+
+---
+
+## ➡️ 下一章
+
+ch11 在同一套服务上加入 OpenTelemetry、Prometheus 与 `AgentTrace`，让每次请求可追溯。
+
+---
+
+## 📚 扩展阅读与参考资料
+
+- [MDN: Server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)
+- [Gin documentation](https://gin-gonic.com/docs/)
+- [GORM documentation](https://gorm.io/docs/)

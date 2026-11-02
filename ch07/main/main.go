@@ -30,8 +30,8 @@ func run() error {
 
 		embedBase   = flag.String("embed-base-url", env("CH07_EMBED_BASE_URL", ""), "OpenAI-compatible embedding base URL")
 		embedKey    = flag.String("embed-api-key", env("CH07_EMBED_API_KEY", ""), "embedding API key")
-		embedModel  = flag.String("embed-model", env("CH07_EMBED_MODEL", "embedding"), "embedding model")
-		dimensions  = flag.Int("dimensions", envInt("CH07_EMBED_DIMENSIONS", 512), "embedding dimensions")
+		embedModel  = flag.String("embed-model", env("CH07_EMBED_MODEL", rag.DefaultEmbeddingModel), "embedding model")
+		dimensions  = flag.Int("dimensions", envInt("CH07_EMBED_DIMENSIONS", rag.DefaultDimensions), "embedding dimensions")
 		rerankBase  = flag.String("rerank-base-url", env("CH07_RERANK_BASE_URL", ""), "optional rerank base URL")
 		rerankKey   = flag.String("rerank-api-key", env("CH07_RERANK_API_KEY", ""), "rerank API key")
 		rerankModel = flag.String("rerank-model", env("CH07_RERANK_MODEL", "rerank"), "rerank model")

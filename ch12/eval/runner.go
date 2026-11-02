@@ -1,23 +1,31 @@
 package eval
 
 import (
-	"babyagent/ch12/agent"
 	"context"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
+
+	"babyagent/ch12/agent"
 )
 
 type Executor func(context.Context, Case) (agent.Result, error)
+
 type CaseResult struct {
 	ID       string        `json:"id"`
 	Passed   bool          `json:"passed"`
 	Duration time.Duration `json:"duration"`
-	Result   agent.Result  `json:"-"`
 	Failures []string      `json:"failures,omitempty"`
 	Error    string        `json:"error,omitempty"`
+
+	// 以下字段是评测报告真正要看的输出，必须序列化进 JSON。
+	Response  string      `json:"response,omitempty"`
+	ToolCalls []string    `json:"tool_calls,omitempty"`
+	LoopDepth int         `json:"loop_depth"`
+	Usage     agent.Usage `json:"usage,omitempty"`
 }
+
 type Report struct {
 	Dataset    string       `json:"dataset"`
 	StartedAt  time.Time    `json:"started_at"`
@@ -32,7 +40,12 @@ func Run(ctx context.Context, dataset Dataset, parallelism int, execute Executor
 	if parallelism < 1 {
 		parallelism = 1
 	}
-	report := Report{Dataset: dataset.Name, StartedAt: time.Now(), Total: len(dataset.Cases), Cases: make([]CaseResult, len(dataset.Cases))}
+	report := Report{
+		Dataset:   dataset.Name,
+		StartedAt: time.Now(),
+		Total:     len(dataset.Cases),
+		Cases:     make([]CaseResult, len(dataset.Cases)),
+	}
 	jobs := make(chan int)
 	var wg sync.WaitGroup
 	for range parallelism {
@@ -59,10 +72,18 @@ func Run(ctx context.Context, dataset Dataset, parallelism int, execute Executor
 	}
 	return report
 }
+
 func runCase(ctx context.Context, c Case, execute Executor) CaseResult {
 	start := time.Now()
 	result, err := execute(ctx, c)
-	r := CaseResult{ID: c.ID, Duration: time.Since(start), Result: result}
+	r := CaseResult{
+		ID:        c.ID,
+		Duration:  time.Since(start),
+		Response:  result.Response,
+		ToolCalls: result.ToolCalls,
+		LoopDepth: result.LoopDepth,
+		Usage:     result.Usage,
+	}
 	if err != nil {
 		r.Error = err.Error()
 		return r
@@ -81,6 +102,7 @@ func runCase(ctx context.Context, c Case, execute Executor) CaseResult {
 	r.Passed = len(r.Failures) == 0
 	return r
 }
+
 func sameStrings(want, got []string) bool {
 	if len(want) != len(got) {
 		return false

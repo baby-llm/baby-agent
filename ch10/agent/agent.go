@@ -49,7 +49,7 @@ func (a *Agent) Model() string {
 }
 
 func (a *Agent) findTool(toolName string) (tool.Tool, bool) {
-	t, ok := a.nativeTools[toolName]
+	t, ok := a.nativeTools[tool.AgentTool(toolName)]
 	return t, ok
 }
 

@@ -2,16 +2,16 @@ package ch01
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/option"
 
 	"babyagent/shared"
 )
 
-func NonStreamingRequestSDK(ctx context.Context, modelConf shared.ModelConfig, query string) {
-	client := openai.NewClient(option.WithBaseURL(modelConf.BaseURL), option.WithAPIKey(modelConf.ApiKey))
+func NonStreamingRequestSDK(ctx context.Context, modelConf shared.ModelConfig, query string) error {
+	client := shared.NewLLMClient(modelConf)
 
 	req := openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{
@@ -22,27 +22,28 @@ func NonStreamingRequestSDK(ctx context.Context, modelConf shared.ModelConfig, q
 
 	resp, err := client.Chat.Completions.New(ctx, req)
 	if err != nil {
-		log.Fatalf("failed to send a new completion request: %v", err)
-		return
+		return fmt.Errorf("send completion request: %w", err)
 	}
 
 	if len(resp.Choices) == 0 {
 		log.Printf("no choices returned, resp: %s", resp.RawJSON())
-		return
+		return nil
 	}
 
 	log.Printf("resp content: %s", resp.Choices[0].Message.Content)
 	log.Printf("token usage: %s", resp.Usage.RawJSON())
+	return nil
 }
 
-func StreamingRequestSDK(ctx context.Context, modelConf shared.ModelConfig, query string) {
-	client := openai.NewClient(option.WithBaseURL(modelConf.BaseURL), option.WithAPIKey(modelConf.ApiKey))
+func StreamingRequestSDK(ctx context.Context, modelConf shared.ModelConfig, query string) error {
+	client := shared.NewLLMClient(modelConf)
 
 	req := openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage(query),
 		},
-		Model: modelConf.Model,
+		Model:         modelConf.Model,
+		StreamOptions: openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Bool(true)},
 	}
 
 	stream := client.Chat.Completions.NewStreaming(ctx, req)
@@ -50,13 +51,18 @@ func StreamingRequestSDK(ctx context.Context, modelConf shared.ModelConfig, quer
 
 	for stream.Next() {
 		chunk := stream.Current()
-		log.Printf("stream chunk: %s", chunk.RawJSON())
+		if len(chunk.Choices) > 0 {
+			// SDK 已经把 SSE 解析成结构体，直接打印增量即可。
+			fmt.Print(chunk.Choices[0].Delta.Content)
+		}
 		if chunk.Usage.TotalTokens != 0 {
 			log.Printf("token usage: %s", chunk.Usage.RawJSON())
 		}
 	}
+	fmt.Println()
 
-	if stream.Err() != nil {
-		log.Fatalf("stream error: %v", stream.Err())
+	if err := stream.Err(); err != nil {
+		return fmt.Errorf("stream error: %w", err)
 	}
+	return nil
 }

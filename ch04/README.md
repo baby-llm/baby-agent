@@ -10,7 +10,7 @@
 
 ---
 
-## 🎯 你将学到什么
+## 🎯 本章目标
 
 1. **MCP 原理与接入**：理解 MCP 的基本角色与工具生命周期，并在 Agent 中同时管理 MCP 工具与本地工具。
 
@@ -30,6 +30,12 @@ OPENAI_MODEL=gpt-5.2
 
 ---
 
+## 📌 相对上一章的变化
+
+新增 MCP Client（stdio / HTTP）、工具发现、命名空间（`babyagent_mcp__<server>__<tool>`），并让本地工具与 MCP 工具共用同一个 `Tool` 接口。本地工具仍只有 `bash`；文件读写由 MCP filesystem server 提供。
+
+---
+
 ## 📖 核心原理解析
 
 ### 1. MCP（Model Context Protocol）与工具生态
@@ -38,9 +44,11 @@ OPENAI_MODEL=gpt-5.2
 
 MCP 是一种开放协议，用于让 Agent/LLM 以统一方式发现并调用外部工具。它主要定义了三类角色：
 
-- **Client/Host**：嵌入在 Agent 或应用中，负责发现工具并调用
-- **Server**：对外暴露工具的服务端
-- **Tool**：可被调用的功能接口（输入 JSON，输出结构化结果）
+- **Host**：宿主应用（例如 Claude Desktop），负责用户交互
+- **Client**：Host 内为每个 Server 建立的协议连接，负责发现与调用工具
+- **Server**：对外暴露 tools / resources / prompts 的服务端
+
+> **Tool** 是 Server 暴露的一种能力（输入 JSON Schema，输出结构化结果），不是独立的协议角色。
 
 MCP 的意义在于：**用标准协议解决”模型 × 工具”爆炸式组合问题**，让工具接入更可复用、更可组合。
 
@@ -237,9 +245,9 @@ MCP 将协议层与传输层分离，同样的 JSON-RPC 消息可以通过：
 **启用 MCP 协议日志**：
 
 ```go
-// 在 ch04/mcp.go 中可以添加日志
-log.Printf(“MCP Request → %s”, requestBody)
-log.Printf(“MCP Response ← %s”, responseBody)
+// 伪代码：在 McpClient.callTool 中记录实际请求与响应
+log.Printf("MCP tool call: %s args=%s", toolName, argumentsInJSON)
+log.Printf("MCP result: %v", mcpResult)
 ```
 
 **常见问题排查**：
@@ -315,6 +323,20 @@ go run ./ch04/main
 - “使用 MCP 工具列出当前目录下的文件”
 
 如果 MCP 文件系统服务正常启动，你会看到工具调用日志出现在 TUI 中。
+
+---
+
+## 🚫 故意不实现
+
+- 不做上下文工程与记忆（ch05 / ch06）。
+- MCP server 初始化失败时只跳过该 server，不做重连或健康检查。
+- 工具执行仍然没有沙箱与人工确认（ch08）。
+
+---
+
+## ➡️ 下一章
+
+ch05 开始管理上下文窗口：截断、卸载、摘要三种策略。
 
 ---
 

@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"babyagent/shared"
 )
@@ -19,14 +20,20 @@ type RequestMessage struct {
 	Content string `json:"content"`
 }
 
+// ResponseMessage is used for both a full message and a stream delta. Fields
+// that only appear on one of them are simply empty in the other case.
 type ResponseMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 
-	FinishReason string `json:"finish_reason"`
-
 	ReasoningContent *string `json:"reasoning_content"` // vary by different model provider
 	Reasoning        *string `json:"reasoning"`         // vary by different model provider
+}
+
+type Choice struct {
+	Message      ResponseMessage `json:"message"`
+	Delta        ResponseMessage `json:"delta"`
+	FinishReason string          `json:"finish_reason"`
 }
 
 type Usage struct {
@@ -36,17 +43,13 @@ type Usage struct {
 }
 
 type OpenAIChatCompletionResponse struct {
-	Choices []struct {
-		Message ResponseMessage `json:"message"`
-	} `json:"choices"`
-	Usage *Usage `json:"usage,omitempty"`
+	Choices []Choice `json:"choices"`
+	Usage   *Usage   `json:"usage,omitempty"`
 }
 
 type OpenAIChatCompletionStreamChunk struct {
-	Choices []struct {
-		Delta ResponseMessage `json:"delta"`
-	} `json:"choices"`
-	Usage *Usage `json:"usage,omitempty"`
+	Choices []Choice `json:"choices"`
+	Usage   *Usage   `json:"usage,omitempty"`
 }
 
 type OpenAIChatCompletionRequest struct {
@@ -55,8 +58,8 @@ type OpenAIChatCompletionRequest struct {
 	Stream   bool             `json:"stream"`
 }
 
-func NonStreamingRequestRawHTTP(ctx context.Context, modelConf shared.ModelConfig, query string) {
-	client := http.Client{}
+func NonStreamingRequestRawHTTP(ctx context.Context, modelConf shared.ModelConfig, query string) error {
+	client := http.Client{Timeout: 2 * time.Minute}
 
 	requestBody := OpenAIChatCompletionRequest{
 		Messages: []RequestMessage{
@@ -65,46 +68,50 @@ func NonStreamingRequestRawHTTP(ctx context.Context, modelConf shared.ModelConfi
 		Model:  modelConf.Model,
 		Stream: false,
 	}
-	bodyBytes, _ := json.Marshal(requestBody)
+	bodyBytes, err := json.Marshal(requestBody)
+	if err != nil {
+		return fmt.Errorf("marshal request: %w", err)
+	}
 
-	httpReq, _ := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/chat/completions", modelConf.BaseURL), bytes.NewReader(bodyBytes))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/chat/completions", modelConf.BaseURL), bytes.NewReader(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+modelConf.ApiKey)
 
 	httpResp, err := client.Do(httpReq)
 	if err != nil {
-		log.Fatalf("failed to send http request: %v", err)
-		return
+		return fmt.Errorf("send request: %w", err)
 	}
 	defer httpResp.Body.Close()
 
-	if httpResp.StatusCode != 200 {
-		log.Fatalf("failed to send http request: %v", httpResp.StatusCode)
-		return
+	if httpResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(httpResp.Body, 4096))
+		return fmt.Errorf("unexpected status %d: %s", httpResp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	respBodyBytes, err := io.ReadAll(httpResp.Body)
 	if err != nil {
-		log.Fatalf("failed to read http response: %v", err)
-		return
+		return fmt.Errorf("read response: %w", err)
 	}
 
 	resp := OpenAIChatCompletionResponse{}
 	if err := json.Unmarshal(respBodyBytes, &resp); err != nil {
-		log.Fatalf("failed to unmarshal http response: %v", err)
-		return
+		return fmt.Errorf("unmarshal response: %w", err)
 	}
 
 	if len(resp.Choices) == 0 {
 		log.Printf("no choices returned, resp: %v", resp)
-		return
+		return nil
 	}
 	log.Printf("resp content: %s", resp.Choices[0].Message.Content)
 	log.Printf("token usage: %+v", resp.Usage)
+	return nil
 }
 
-func StreamingRequestRawHTTP(ctx context.Context, modelConf shared.ModelConfig, query string) {
-	client := http.Client{}
+func StreamingRequestRawHTTP(ctx context.Context, modelConf shared.ModelConfig, query string) error {
+	client := http.Client{Timeout: 2 * time.Minute}
 
 	requestBody := OpenAIChatCompletionRequest{
 		Messages: []RequestMessage{
@@ -113,22 +120,27 @@ func StreamingRequestRawHTTP(ctx context.Context, modelConf shared.ModelConfig, 
 		Model:  modelConf.Model,
 		Stream: true,
 	}
-	bodyBytes, _ := json.Marshal(requestBody)
+	bodyBytes, err := json.Marshal(requestBody)
+	if err != nil {
+		return fmt.Errorf("marshal request: %w", err)
+	}
 
-	httpReq, _ := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/chat/completions", modelConf.BaseURL), bytes.NewReader(bodyBytes))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/chat/completions", modelConf.BaseURL), bytes.NewReader(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+modelConf.ApiKey)
 
 	httpResp, err := client.Do(httpReq)
 	if err != nil {
-		log.Fatalf("failed to send http request: %v", err)
-		return
+		return fmt.Errorf("send request: %w", err)
 	}
 	defer httpResp.Body.Close()
 
-	if httpResp.StatusCode != 200 {
-		log.Fatalf("failed to send http request: %v", httpResp.StatusCode)
-		return
+	if httpResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(httpResp.Body, 4096))
+		return fmt.Errorf("unexpected status %d: %s", httpResp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	scanner := bufio.NewScanner(httpResp.Body)
@@ -139,27 +151,26 @@ func StreamingRequestRawHTTP(ctx context.Context, modelConf shared.ModelConfig, 
 			continue
 		}
 
-		if strings.HasPrefix(line, "data:") {
-			v := strings.TrimPrefix(line, "data:")
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "[DONE]" {
+			break
+		}
 
-			if strings.TrimSpace(v) == "[DONE]" {
-				break
-			}
-
-			chunk := OpenAIChatCompletionStreamChunk{}
-			if err := json.Unmarshal([]byte(v), &chunk); err != nil {
-				log.Fatalf("failed to unmarshal chunk: %v", err)
-				return
-			}
-			log.Printf("stream chunk: %s", v)
-			if chunk.Usage != nil {
-				log.Printf("token usage: %+v", chunk.Usage)
-			}
+		chunk := OpenAIChatCompletionStreamChunk{}
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			return fmt.Errorf("unmarshal chunk: %w", err)
+		}
+		if len(chunk.Choices) > 0 {
+			// SSE 返回的是增量，逐段打印就能看到“打字机”效果。
+			fmt.Print(chunk.Choices[0].Delta.Content)
+		}
+		if chunk.Usage != nil {
+			log.Printf("token usage: %+v", chunk.Usage)
 		}
 	}
-
-	if scanner.Err() != nil {
-		log.Fatalf("failed to read http response: %v", err)
-		return
-	}
+	fmt.Println()
+	return scanner.Err()
 }

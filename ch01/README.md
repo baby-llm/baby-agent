@@ -8,7 +8,7 @@
 
 ---
 
-## 🎯 你将学到什么
+## 🎯 本章目标
 
 1. **协议本质**：掌握 `chat/completions` 接口的最小化请求和响应结构。
 2. **流式输出解析**：深入了解如何解析 Server-Sent Events (SSE) 协议，实现“打字机”效果。
@@ -26,10 +26,16 @@
 # 如果你使用的是国内模型（如 DeepSeek/GLM），请修改 Base URL 和 Model
 OPENAI_API_KEY=sk-your-api-key-here
 OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-5.2
 ```
 
 > **💡 小贴士**：得益于 OpenAI 协议的非正式标准化，只需更改 `BASE_URL` 和 `MODEL`，同一套代码就能无缝切换到绝大多数主流大模型厂商。
+
+---
+
+## 📌 相对上一章的变化
+
+本章是整条学习路径的起点：没有 Agent、没有工具、没有上下文管理，只做一件事——把一次 LLM 调用看清楚。后续所有章节都建立在“请求 → 响应或 SSE 增量 → 解析”这条链路上。
 
 ---
 
@@ -70,7 +76,7 @@ data: [DONE]
 
 ---
 
-## 💻 代码实现对比
+## 💻 代码结构速览
 
 本项目提供了两套完整的实现，通过命令行参数进行切换。
 
@@ -216,6 +222,19 @@ go run ./ch01/main --raw -q "什么是大语言模型？用一句话解释"
 ```bash
 go run ./ch01/main --raw --stream -q "从 1 数到 5"
 ```
+
+## 🚫 故意不实现
+
+- 不做多轮对话与历史管理（ch02、ch05）。
+- 不做工具调用与 Agent Loop（ch02）。
+- 不做错误重试、超时与生产级可观测性（ch10、ch11）。
+- 流式输出只演示“逐段打印”，不做 TUI（ch03）。
+
+---
+
+## ➡️ 下一章
+
+ch02 会把“一次调用”扩展成 **Tool Calling + Agent Loop**：模型发起工具调用，程序执行后把结果回填，直到模型给出最终回答。
 
 ---
 

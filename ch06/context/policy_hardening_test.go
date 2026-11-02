@@ -97,9 +97,9 @@ func TestTruncatePolicyPreservesLeadingSummary(t *testing.T) {
 func TestEngineCountsSystemPrompt(t *testing.T) {
 	engine := NewContextEngine(nil, nil)
 	engine.Init("you are a helpful assistant", TokenBudget{ContextWindow: 100000})
-	userMessage := openai.UserMessage("hi")
-	engine.messages = []messageWrap{{Message: userMessage, Tokens: CountTokens(userMessage)}}
-	engine.recountTokens()
+	if err := engine.CommitTurn(context.Background(), engine.StartTurn(openai.UserMessage("hi"))); err != nil {
+		t.Fatalf("CommitTurn() error = %v", err)
+	}
 
 	userTokens := CountTokens(openai.UserMessage("hi"))
 	if engine.contextTokens <= userTokens {

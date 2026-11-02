@@ -2,19 +2,21 @@ package shared
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
+	"sort"
 	"strings"
 )
 
 type McpServerConfig struct {
 	// for stdio
-	Command string            `json:"command" yaml:"command"`
-	Args    []string          `json:"args" yaml:"args"`
-	Env     map[string]string `json:"env" yaml:"env"`
+	Command string            `json:"command"`
+	Args    []string          `json:"args"`
+	Env     map[string]string `json:"env"`
 	// for http
-	Type    string            `json:"type" yaml:"type"`
-	Url     string            `json:"url" yaml:"url"`
-	Headers map[string]string `json:"headers" yaml:"headers"`
+	Type    string            `json:"type"`
+	Url     string            `json:"url"`
+	Headers map[string]string `json:"headers"`
 }
 
 func (s *McpServerConfig) IsStdio() bool {
@@ -56,9 +58,19 @@ func (s *McpServerConfig) ReplacePlaceholders(replaceMap map[string]string) McpS
 	return newConfig
 }
 
+// replacePlaceholders replaces longer keys first. Otherwise a map containing
+// both "${workspace}" and "${workspaceFolder}" can expand the short key inside
+// the long one and corrupt the result.
 func replacePlaceholders(value string, replaceMap map[string]string) string {
-	for k, v := range replaceMap {
-		value = strings.ReplaceAll(value, k, v)
+	keys := make([]string, 0, len(replaceMap))
+	for k := range replaceMap {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return len(keys[i]) > len(keys[j])
+	})
+	for _, k := range keys {
+		value = strings.ReplaceAll(value, k, replaceMap[k])
 	}
 	return value
 }
@@ -70,9 +82,13 @@ func LoadMcpServerConfig(path string) (map[string]McpServerConfig, error) {
 	}
 	serverMap := make(map[string]McpServerConfig)
 
-	err = json.Unmarshal(content, &serverMap)
-	if err != nil {
+	if err := json.Unmarshal(content, &serverMap); err != nil {
 		return nil, err
+	}
+	for name, server := range serverMap {
+		if !server.IsStdio() && !server.IsHttp() {
+			return nil, errors.New("MCP server " + name + " must set either command (stdio) or url (http)")
+		}
 	}
 	return serverMap, nil
 }

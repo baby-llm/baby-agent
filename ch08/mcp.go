@@ -123,7 +123,6 @@ func (e *McpClient) RefreshTools(ctx context.Context) error {
 		agentTool := &McpTool{
 			client:   e,
 			toolName: mcpTool.Name,
-			session:  e.session,
 			mcpTool:  mcpTool,
 		}
 
@@ -168,13 +167,12 @@ func (e *McpClient) callTool(ctx context.Context, toolName string, argumentsInJS
 type McpTool struct {
 	toolName string // 给 mcp server 看的，和给模型看的不一样
 	client   *McpClient
-	session  *mcp.ClientSession
 	mcpTool  *mcp.Tool
 }
 
 // ToolName 给模型看的，和给 mcp server 看的不一样
-func (t *McpTool) ToolName() string {
-	return fmt.Sprintf("babyagent_mcp__%s__%s", t.client.Name(), t.toolName)
+func (t *McpTool) ToolName() tool.AgentTool {
+	return tool.AgentTool(fmt.Sprintf("babyagent_mcp__%s__%s", t.client.Name(), t.toolName))
 }
 
 func (t *McpTool) Info() openai.ChatCompletionToolUnionParam {
@@ -187,7 +185,7 @@ func (t *McpTool) Info() openai.ChatCompletionToolUnionParam {
 	}
 	return openai.ChatCompletionFunctionTool(shared2.FunctionDefinitionParam{
 		Description: openai.String(t.mcpTool.Description),
-		Name:        t.ToolName(),
+		Name:        string(t.ToolName()),
 		Parameters:  schema,
 	})
 }

@@ -5,13 +5,26 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 
 	"babyagent/ch12/agent"
 	"babyagent/ch12/eval"
 )
 
+// defaultDatasetPath locates the bundled dataset relative to this source file,
+// so `go run ./ch12/main` and `cd ch12 && go run ./main` both work. A built
+// binary can still override the path with -dataset.
+func defaultDatasetPath() string {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return filepath.Join("ch12", "dataset", "demo.json")
+	}
+	return filepath.Join(filepath.Dir(file), "..", "dataset", "demo.json")
+}
+
 func main() {
-	datasetPath := flag.String("dataset", "ch12/dataset/demo.json", "path to evaluation dataset JSON")
+	datasetPath := flag.String("dataset", defaultDatasetPath(), "path to evaluation dataset JSON")
 	outputPath := flag.String("output", "", "optional JSON report path")
 	markdownPath := flag.String("markdown", "", "optional Markdown report path")
 	parallelism := flag.Int("parallel", 1, "number of cases to run concurrently")

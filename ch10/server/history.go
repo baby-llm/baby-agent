@@ -20,14 +20,17 @@ func buildHistory(allMsgs []ChatMessage, parentMessageID string) []shared.OpenAI
 		index[allMsgs[i].MessageID] = &allMsgs[i]
 	}
 
-	// 从 parentMessageID 向根节点追溯，收集路径（顺序：根 -> parent）
+	// 从 parentMessageID 向根节点追溯，收集路径（顺序：根 -> parent）。
+	// visited 防止脏数据里的环导致死循环。
 	path := make([]*ChatMessage, 0)
+	visited := make(map[string]bool, len(allMsgs))
 	cur := parentMessageID
-	for cur != "" {
+	for cur != "" && !visited[cur] {
 		msg, ok := index[cur]
 		if !ok {
 			break
 		}
+		visited[cur] = true
 		path = append(path, msg)
 		cur = msg.ParentMessageID
 	}

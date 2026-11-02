@@ -8,7 +8,7 @@
 
 ---
 
-## 🎯 你将学到什么
+## 🎯 本章目标
 
 1. **Function Calling 的协议形态**：如何向模型声明工具、如何解析工具调用。
 2. **最小 Agent Loop**：工具调用 -> 反馈 -> 再推理的闭环流程。
@@ -25,6 +25,12 @@ OPENAI_API_KEY=sk-your-api-key-here
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-5.2
 ```
+
+---
+
+## 📌 相对上一章的变化
+
+ch01 只做一次请求；本章新增工具声明、`tool_calls` 解析、Agent Loop，以及 `read` / `write` / `edit` / `bash` 四个本地工具。上下文会随着 tool loop 一直增长，本章不做压缩。
 
 ---
 
@@ -132,7 +138,7 @@ go run ./ch02/main -q "在 ch02 目录下创建一个 TODO.md，内容为 1. 研
 ## ⚠️ 安全提示
 
 在赋予大模型执行本地系统命令（如 `bash` 工具）和修改文件的能力时，存在极高的安全风险。模型可能会因为幻觉或恶意指令注入（Prompt Injection）执行危险操作（如 `rm -rf`）。
-在真实的生产环境中，**务必引入严格的安全策略**（例如：命令白名单、执行前的二次人工确认、或在 Docker 沙盒环境中隔离运行）。相关的高级安全防护策略将在后续章节详细探讨。
+在真实的生产环境中，**务必引入严格的安全策略**（例如：命令白名单、执行前的二次人工确认、或在 Docker 沙盒环境中隔离运行）。工具本身也能读写任意路径，因此路径校验、沙箱和确认机制同样重要；这些内容分别在后文的 Guardrails、Skills 等章节展开。
 
 ---
 
@@ -241,6 +247,21 @@ Sunny, 25°C<|im_end|>
 4. **理解 Token 计算**：template 会额外消耗 token（如 `<|im_start|>` 等）
 
 对于本章的 Function Calling，SDK 会自动处理 Chat Template 转换，你只需关注 API 层的 `messages` 和 `tools` 结构。但理解转换原理有助于排查"为什么模型不调用工具"等问题。
+
+---
+
+## 🚫 故意不实现
+
+- 不做流式输出与 TUI（ch03）。
+- 不做 MCP 工具发现（ch04）。
+- 不做上下文压缩，历史会无限增长（ch05）。
+- 工具直接在宿主机执行，没有沙箱或人工确认（ch08）。
+
+---
+
+## ➡️ 下一章
+
+ch03 把同步的 Agent Loop 改成流式，并加入 TUI、reasoning 展示与 ESC 取消。
 
 ---
 
