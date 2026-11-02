@@ -325,6 +325,11 @@ go run ./ch04/main
 
 如果 MCP 文件系统服务正常启动，你会看到工具调用日志出现在 TUI 中。
 
+### 可选：本地代码查找
+
+参见 [Sem MCP 配置示例](sem-mcp.md)，通过现有 stdio 传输查找本地 Git 仓库中的函数。
+默认配置不变。
+
 ### 可选：无 API Key 的网页搜索与抓取
 
 除了默认的文件系统服务，本章还可以接入 [Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp)，
